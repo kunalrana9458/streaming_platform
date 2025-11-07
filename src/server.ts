@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import mongoose from 'mongoose'
 import authRoutes from './modules/auth/auth.routes'
+import catalogRoutes from './modules/catalog/catalog.routes'
 
 dotenv.config()
 
@@ -22,6 +23,7 @@ mongoose
 
 app.get('/', (_req, res) => { res.send('StreamSphere backend running !')})
 app.use('/auth',authRoutes)
+app.use('/catalog',catalogRoutes)
 
 const PORT = process.env.PORT || 5000   
 

@@ -111,3 +111,28 @@ User Access Token for protected route
 If Access Token expires -> use Refresh Token
       ↓
 Logout -> refresh token invalidated (tokenVersion++)
+
+# Day 3 - Catalog Service (Movies/Series Metadata)
+Build a complete content-management module for the OTT platform that allows admins to create, update, and delete titles (movies / series), and allows public users to fetch and browse them with pagination and filtering.
+This introduces role-based route protection and modular service design in TypeScript.
+
+Feature	Endpoint	Access	Description
+Create Title	POST /catalog/title	Admin	Adds a new movie / series record
+List Titles	GET /catalog/titles?page=1&limit=10	Public	Paginated list of titles
+Get by ID	GET /catalog/title/:id	Public	Returns a single title
+Update Title	PUT /catalog/title/:id	Admin	Modifies an existing record
+Delete Title	DELETE /catalog/title/:id	Admin	Removes a record
+
+Tech and Concepts Introduced
+
+Mongoose Models → schema-based MongoDB structure
+
+Zod Validation → ensures input correctness
+
+Service Layer Pattern → isolates DB logic from controllers
+
+Role-Based Middleware → requireAuth, requireRole('admin')
+
+Pagination → ?page=&limit= query handling
+
+Clean Modular Design → separate model, service, controller, routes
