@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import mongoose from 'mongoose'
+import authRoutes from './modules/auth/auth.routes'
 
 dotenv.config()
 
@@ -8,9 +10,18 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-app.get('/', (req, res) => {
-  res.send('Hello, StreamSphere!')
-})
+
+// Mongo connect
+mongoose
+     .connect(process.env.MONGO_URL as string)
+     .then(() => console.log("MongoDB Connected"))
+     .catch((e) => {
+      console.error('Mongo connection error:',e)
+      process.exit(1)
+     })
+
+app.get('/', (_req, res) => { res.send('StreamSphere backend running !')})
+app.use('/auth',authRoutes)
 
 const PORT = process.env.PORT || 5000   
 
