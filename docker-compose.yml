@@ -22,6 +22,12 @@ services:
     volumes:
       - minio_data:/data
 
+  redis:
+    image: redis:7
+    container_name: stremesphere-redis
+    ports:
+      - "6379:6379"
+
 volumes:
   mongo_data:
   minio_data:

@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import mongoose from 'mongoose'
 import authRoutes from './modules/auth/auth.routes'
 import catalogRoutes from './modules/catalog/catalog.routes'
+import mediaRoutes from './modules/media/media.routes'
 
 dotenv.config()
 
@@ -24,6 +25,7 @@ mongoose
 app.get('/', (_req, res) => { res.send('StreamSphere backend running !')})
 app.use('/auth',authRoutes)
 app.use('/catalog',catalogRoutes)
+app.use('/media',mediaRoutes)
 
 const PORT = process.env.PORT || 5000   
 
