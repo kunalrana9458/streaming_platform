@@ -216,52 +216,27 @@ app.use('/media', mediaRoutes)
 app.listen(3000, () => console.log('Server running on 3000'))
 ```
 
-### Simple Upload Controller Example
-
-```ts
-import { Request, Response } from 'express'
-import { MinioClient } from '../../config/minio'
-import fs from 'fs'
-
-export const uploadMediaController = async (req: Request, res: Response) => {
-  try {
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' })
-    const file = req.file as Express.Multer.File
-
-    // upload to MinIO (pseudo)
-    const objectKey = `videos/${Date.now()}-${file.originalname}`
-    await MinioClient.putObject('videos', objectKey, fs.createReadStream(file.path), file.size)
-
-    // remove temp file
-    fs.unlinkSync(file.path)
-
-    // save metadata to DB & respond
-    return res.json({ message: 'File uploaded successfully', media: { originalName: file.originalname, url: `http://localhost:9000/${objectKey}`, status: 'uploaded' } })
-  } catch (err) {
-    console.error(err)
-    return res.status(500).json({ message: 'Upload failed' })
-  }
-}
-```
-
 ---
 
-## 📌 Next Steps (Day 5+)
+### Day 5 — Presigned Uploads + Worker (10-minute presign; simulated processing)
 
-* Implement background worker for transcoding & thumbnail generation (BullMQ + Redis)
-* Add streaming-friendly endpoints (signed URLs, range requests)
-* Build admin UI or Postman collection for testing
-* Harden security (rate limiting, CORS, helmet)
-* Add monitoring (Prometheus + Grafana) and centralized logging
+**Objective:** Allow clients to upload directly to MinIO using presigned PUT URLs; return presigned GET URLs for streaming once the worker finishes processing. Add a BullMQ worker to process uploads (simulated).
 
----
+**What I implemented**
+- `POST /media/presign` — returns presigned PUT URL and creates Media DB record (`upload_pending`).
+- `POST /media/:id/complete` — client notifies server after successful direct upload; server enqueues processing job.
+- `GET /media/:id/url` — returns presigned GET URL if media is `ready`.
+- `media-worker` — BullMQ consumer that simulates processing (5s), updates status `processing` -> `ready`.
+- MinIO client wrapper and Queue helper added.
 
-## ❤️ Contributing
 
-PRs, issues, and suggestions are welcome. This repo is a learning playground — focus is on readable, well-documented code.
+**Next steps**
+- Replace simulated worker with FFmpeg pipeline & store derived outputs.
+- Add MinIO bucket notifications to auto-enqueue jobs (optional).
+- Add more robust file validations, size checks, content-type checks, and virus scanning.
 
----
+**Commit message suggestion**
+`feat(media): add presigned upload/get endpoints + BullMQ worker (simulated processing)`
 
-## License
-
-MIT
+**Interview bullet (1–2 lines)**  
+Implemented direct S3-compatible presigned uploads to MinIO for scalable media ingestion and added a BullMQ worker to simulate asynchronous transcoding — demonstrates event-driven media pipelines and scalable background processing.
