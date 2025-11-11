@@ -1,7 +1,7 @@
 
 import {Request,Response} from 'express'
 import { MediaService } from './media.service'
-import { tryCatch } from 'bullmq'
+import Media from './media.model'
 
 
 // POST - /media/presign
@@ -49,3 +49,15 @@ export async function getStreamingUrl(req:Request,res:Response) {
         return res.status(400).json({message:err.message})
     }
 }
+
+// GET /media/:id   (metadata)
+export async function getMediaById(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const doc = await Media.findById(id).lean();
+    if (!doc) return res.status(404).json({ message: 'Media not found' });
+    return res.json({ media: doc });
+  } catch (e: any) {
+    return res.status(500).json({ message: e.message });
+  }
+}   

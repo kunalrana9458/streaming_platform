@@ -240,3 +240,13 @@ app.listen(3000, () => console.log('Server running on 3000'))
 
 **Interview bullet (1–2 lines)**  
 Implemented direct S3-compatible presigned uploads to MinIO for scalable media ingestion and added a BullMQ worker to simulate asynchronous transcoding — demonstrates event-driven media pipelines and scalable background processing.
+
+### Day 6 — Media Metadata + Progress
+
+**Objective:** Extract real video metadata (ffprobe) after upload, track processing progress, and expose a media details API.
+
+**What’s implemented**
+- Worker now uses ffprobe to extract `duration, width, height, codecs, format, bitrate`.
+- Media schema extended with `metadata`, `progress`, `processingLogs`, `outputUrl` (placeholder).
+- Progress tracked via BullMQ `updateProgress()` and saved to Mongo.
+- New endpoint: `GET /media/:id` returns full media document.
