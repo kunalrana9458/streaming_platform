@@ -250,3 +250,20 @@ Implemented direct S3-compatible presigned uploads to MinIO for scalable media i
 - Media schema extended with `metadata`, `progress`, `processingLogs`, `outputUrl` (placeholder).
 - Progress tracked via BullMQ `updateProgress()` and saved to Mongo.
 - New endpoint: `GET /media/:id` returns full media document.
+
+
+### Day 7 — Single-bitrate HLS (FFmpeg → MinIO)
+
+**Objective:** Transcode uploaded videos to HLS (one bitrate), upload artifacts to MinIO, and return signed URLs to the master m3u8.
+
+**What I implemented**
+- Worker: downloads source, runs FFmpeg to generate HLS, uploads folder to MinIO, updates `outputUrlKey`.
+- Media model: added `outputUrlKey` (MinIO key for master.m3u8).
+- `/media/:id/url` now returns a signed URL to `.m3u8` when ready (fallback to original object if no HLS).
+- Content-Type set for `.m3u8` and `.ts` on upload.
+
+**How to run**
+1. `docker compose up -d mongo minio redis`
+2. `pnpm dev` (API)
+3. `pnpm worker` (Worker)
+4. Flow: presign → PUT upload → complete → worker → `GET /media/:id/url`

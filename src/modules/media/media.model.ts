@@ -23,6 +23,7 @@ export interface IMedia extends Document {
 
   progress?: number;
   outputUrl?: string;
+  outputUrlKey?: string;
   processingLogs?: string[];
 
   createdAt: Date;
@@ -56,6 +57,7 @@ const MediaSchema = new Schema<IMedia>({
     },
     progress: { type: Number, default: 0 },
     outputUrl: { type: String },
+    outputUrlKey: { type: String },
     processingLogs: { type: [String], default: [] },
   },
   { timestamps: true });

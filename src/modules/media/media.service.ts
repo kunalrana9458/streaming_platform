@@ -43,7 +43,8 @@ export const MediaService = {
     const media = await Media.findById(mediaId)
     if(!media) throw new Error('Media Not Found')
     if(media.status !== 'ready') throw new Error('Media not ready for streaming')
-    const url = await presignGet(media.objectKey,600)
+    const key = media.outputUrlKey || media.objectKey
+    const url = await presignGet(key,600)
     return {media,url}
   },
 
