@@ -4,7 +4,6 @@ import fs from "fs";
 import { ensureDir } from "./tmp";
 
 import dotenv from "dotenv";
-import { rejects } from "assert";
 
 dotenv.config();
 
@@ -25,7 +24,7 @@ export async function transcodeToHlsSingle(
 ): Promise<{ masterPath: string }> {
   const {
     variantName = "hls",
-    videoBitrate = "2500k",
+    videoBitrate = "25000k",
     audioBitrate = "128k",
     hlsTime = 4,
     hlsListSize = 0,
@@ -37,34 +36,56 @@ export async function transcodeToHlsSingle(
   const master = path.join(variantDir, "master.m3u8");
   const segmentPattern = path.join(variantDir, "segment_%03d.ts");
 
-  const args = [
-    "-y", // overwrite existing files
-    "-i",
-    inputPath, // input file path
-    "-c:v",
-    "libx264", // video codec
-    "-preset",
-    "veryfast", // encoding speed (quality tradeoff)
-    "-b:v",
-    videoBitrate, // target video bitrate
-    "-c:a",
-    "aac", // audio codec
-    "-b:a",
-    audioBitrate, // target audio bitrate
-    "-ac",
-    "2", // audio channels (stereo)
-    "-f",
-    "hls", // output format
-    "-hls_time",
-    String(hlsTime), // segment length (seconds)
-    "-hls_list_size",
-    String(hlsListSize), // 0 = all segments
-    "-hls_segment_filename",
-    segmentPattern, // naming pattern
-    "-hls_flags",
-    "independent_segments", // independent keyframes per segment
-    master, // output playlist file
-  ];
+  // assume videoBitrate is like "2500k" and hlsTime is number (e.g. 4)
+const num = parseInt(String(videoBitrate).replace(/k$/i, ""), 10) || 2500;
+const maxrate = `${Math.round(num * 1.5)}k`;
+const bufsize = `${Math.round(num * 3)}k`;
+
+// choose target GOP based on ~30fps (use a reasonable default)
+const fpsEstimate = 30;
+const keyint = Math.max(1, Math.round(fpsEstimate * hlsTime));      // e.g. 30 * 4 = 120
+const minKeyint = Math.max(1, Math.round(keyint / 2));             // e.g. 60
+
+const args = [
+  "-y",
+  "-i", inputPath,
+
+  // video codec + preset
+  "-c:v", "libx264",
+  "-preset", "medium",        // change to "fast" if you need speed over quality
+  "-profile:v", "main",
+  "-pix_fmt", "yuv420p",
+
+  // scale to 720p (remove or change height if you want same as source)
+  "-vf", "scale=-2:720:flags=bicubic",
+
+  // bitrate control (ABR) - remove '-crf' when using bitrate mode
+  "-b:v", videoBitrate,      // e.g. "2500k"
+  "-maxrate", maxrate,       // ~1.5 * target
+  "-bufsize", bufsize,       // ~3 * target
+
+  // GOP / keyframe settings (portable)
+  "-g", String(keyint),
+  "-keyint_min", String(minKeyint),
+  "-sc_threshold", "0",
+
+  // audio
+  "-c:a", "aac",
+  "-b:a", audioBitrate,
+  "-ac", "2",
+  "-ar", "48000",
+
+  // HLS output
+  "-f", "hls",
+  "-hls_time", String(hlsTime),
+  "-hls_list_size", String(hlsListSize),
+  "-hls_segment_filename", segmentPattern,
+  "-hls_flags", "independent_segments+append_list",
+  master
+];
+
+
+
 
   await runFfmpeg(args);
   if(!fs.existsSync(master)) {
