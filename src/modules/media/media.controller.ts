@@ -2,6 +2,7 @@
 import {Request,Response} from 'express'
 import { MediaService } from './media.service'
 import Media from './media.model'
+import { presignGet } from '../../lib/minio.client'
 
 
 // POST - /media/presign
@@ -61,3 +62,24 @@ export async function getMediaById(req: Request, res: Response) {
     return res.status(500).json({ message: e.message });
   }
 }   
+
+
+// GET /:id/thumbnails
+export async function getThumbnailAndWebVttData(req: Request, res: Response) {
+    try {
+         const media = await Media.findById(req.params.id);
+  if (!media) return res.status(404).json({ message: 'not found' });
+
+  const bucket = process.env.MINIO_BUCKET!;
+  const expires = 60 * 60; // 1 hour
+
+  const thumbs = (media.thumbnails || []).map((key: string) => presignGet(key, expires));
+  const sprite = media.spriteKey ? presignGet(media.spriteKey, expires) : null;
+  const vtt = media.vttKey ? presignGet(media.vttKey, expires) : null;
+
+  // presignGet may return Promise or string depending on your client; adapt accordingly
+  res.json({ thumbnails: await Promise.all(thumbs), sprite: await sprite, vtt: await vtt })
+    } catch (error) {
+        
+    }
+}

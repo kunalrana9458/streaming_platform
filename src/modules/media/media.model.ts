@@ -26,6 +26,10 @@ export interface IMedia extends Document {
   outputUrlKey?: string;
   processingLogs?: string[];
 
+  thumbnails?: string[]; // array of MinIO object keys''
+  spriteKey?: string | null;
+  vttKey?: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,7 +62,13 @@ const MediaSchema = new Schema<IMedia>({
     progress: { type: Number, default: 0 },
     outputUrl: { type: String },
     outputUrlKey: { type: String },
+    
+    thumbnails: { type: [String], default: [] },
+    spriteKey: { type: String, default: null },
+    vttKey: { type: String, default: null },
+
     processingLogs: { type: [String], default: [] },
+
   },
   { timestamps: true });
 

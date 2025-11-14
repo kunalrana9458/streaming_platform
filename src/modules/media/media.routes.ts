@@ -1,7 +1,11 @@
 
 import {Router} from 'express'
 import multer from 'multer'
-import { presignUpload,uploadComplete,getStreamingUrl,getMediaById } from './media.controller'
+import { presignUpload,
+         uploadComplete,
+         getStreamingUrl,
+         getMediaById,
+         getThumbnailAndWebVttData } from './media.controller'
 import { requireAuth,requireRole } from '../../middleware/authMiddleware'
 
 const upload = multer({dest:'uploads/'})
@@ -22,5 +26,9 @@ router.get('/:id/url',
 router.get('/:id',
     // requireAuth,
     getMediaById)
+
+router.get('/:id/thumbnails',
+    getThumbnailAndWebVttData
+)
 
 export default router
