@@ -262,8 +262,84 @@ Implemented direct S3-compatible presigned uploads to MinIO for scalable media i
 - `/media/:id/url` now returns a signed URL to `.m3u8` when ready (fallback to original object if no HLS).
 - Content-Type set for `.m3u8` and `.ts` on upload.
 
-**How to run**
-1. `docker compose up -d mongo minio redis`
-2. `pnpm dev` (API)
-3. `pnpm worker` (Worker)
-4. Flow: presign → PUT upload → complete → worker → `GET /media/:id/url`
+
+### Day 8 — Thumbnails, Sprite & WebVTT (Preview / Hover Thumbnails)
+
+**Objective:**
+Generate video preview assets so the client can show timeline hover thumbnails and quick previews. This includes generating multiple thumbnails, stitching them into a sprite image, producing a WebVTT file, uploading all assets to MinIO, and exposing signed URLs via the API.
+
+---
+
+## What I Implemented
+
+### 1. Worker Enhancements
+
+After HLS processing (or even without it), the worker now performs the following:
+
+* **Generates 10–12 thumbnails** spaced evenly across the video duration.
+
+  * Example files: `thumb-001.png`, `thumb-002.png`, ...
+
+* **Creates a sprite image** using FFmpeg tile filter.
+
+  * Example: `sprite.jpg`
+  * Arranged in a grid (e.g., 4 columns × N rows)
+
+* **Builds a WebVTT file** that links specific time ranges to positions within the sprite image.
+
+  * Example: `sprite.vtt`
+
+* **Uploads all generated assets to MinIO** under:
+
+  ```
+  thumbnails/<mediaId>/
+  ```
+
+* **Updates the Media document** with object keys:
+
+  ```json
+  thumbnails: ["thumbnails/<mediaId>/thumb-001.png", ...],
+  spriteKey: "thumbnails/<mediaId>/sprite.jpg",
+  vttKey: "thumbnails/<mediaId>/sprite.vtt"
+  ```
+
+* **Improved worker logging & progress tracking** for transparency during the processing pipeline.
+
+---
+
+## 2. API Enhancements
+
+### `GET /media/:id/thumbnails`
+
+Returns presigned URLs for thumbnails, sprite image, and VTT file.
+
+**Response example:**
+
+```json
+{
+  "thumbnails": ["<signed-url>", "<signed-url>", ...],
+  "sprite": "<signed-url>",
+  "vtt": "<signed-url>"
+}
+```
+
+### `GET /media/:id`
+
+Now includes DB fields:
+
+* `thumbnails[]`
+* `spriteKey`
+* `vttKey`
+
+These are MinIO object keys from which presigned URLs are generated.
+
+---
+
+## 3. Robustness Improvements
+
+* Thumbnail/sprite/VTT errors **do not break the main pipeline**.
+* Video playback (HLS) still becomes available even if preview assets fail.
+* Worker logs failures in `processingLogs` for debugging.
+* Worker cleans all temporary directories after processing.
+
+---
