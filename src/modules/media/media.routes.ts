@@ -8,7 +8,6 @@ import { presignUpload,
          getThumbnailAndWebVttData } from './media.controller'
 import { requireAuth,requireRole } from '../../middleware/authMiddleware'
 
-const upload = multer({dest:'uploads/'})
 const router = Router()
 
 // admin-only upload
