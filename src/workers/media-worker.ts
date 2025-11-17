@@ -11,6 +11,9 @@ import fs from 'fs';
 import os from 'os';
 import { transcodeToHlsSingle } from '../utils/hls';
 import { generateSpriteAndVtt, generateThumbnails } from '../utils/thumbs';
+import { mediaJobDuration, mediaJobsTotal } from '../observability/metrics';
+import logger from '../observability/logger';
+import { Sentry } from '../observability/sentry';
 
 async function processJob(job: Job) {
   const { mediaId } = job.data as { mediaId: string };
@@ -33,7 +36,11 @@ async function processJob(job: Job) {
   const workDir = tmpSubdir(`media-${mediaId}`);
   const thumbWork = path.join(os.tmpdir(), `thumbs-${mediaId}`);
 
+  const endTimer = mediaJobDuration.startTimer();
+
   try {
+    // logs the job start
+    logger.info({jobId:job.id,mediaId},'job_start')
     // 1 -> download original
     const srcPath = await downloadObjectToTemp(media.objectKey);
     await addLog(`Downloaded source: ${srcPath}`);
@@ -138,7 +145,11 @@ async function processJob(job: Job) {
 
     await job.updateProgress(100);
     await addLog(`Job finished: outputUrlKey=${masterRelKey}`);
+    mediaJobsTotal.inc({status:'success'})
   } catch (err) {
+    // add the metric when error occur
+    mediaJobsTotal.inc({status:'failed'});
+    Sentry.captureException(err);
     // mark failed and record error
     const msg = (err as Error).message || String(err);
     await addLog(`Job failed: ${msg}`);
@@ -152,6 +163,7 @@ async function processJob(job: Job) {
       // remove workDir & thumbWork
       try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
       try { fs.rmSync(thumbWork, { recursive: true, force: true }); } catch {}
+      endTimer()
     } catch {}
   }
 }

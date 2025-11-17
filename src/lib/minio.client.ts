@@ -15,7 +15,7 @@ const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'admin'
 const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'admin123'
 export const BUCKET = process.env.MINIO_BUCKET || 'videos'
 
-const minioClient = new Client({
+export const minioClient = new Client({
   endPoint: MINIO_ENDPOINT,
   port: MINIO_PORT,
   useSSL: MINIO_USE_SSL,
