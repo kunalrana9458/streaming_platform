@@ -10,7 +10,6 @@ import {
 } from './auth.service'
 
 import User from './auth.model'
-import { error } from 'console'
 
 export const register = async(req:Request,res:Response) => {
     try {

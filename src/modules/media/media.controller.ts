@@ -41,10 +41,18 @@ export async function uploadComplete(req:Request,res:Response) {
 
 
 // GET /media/:id/url
-export async function getStreamingUrl(req:Request,res:Response) {
+export async function getStreamingUrl(req:any,res:Response) {
     try {
         const {id} = req.params
-        const {url} = await MediaService.getStreamingUrl(id)
+
+        const mode = (req.query.mode as string) || 'stream';
+        const variantQuery = (req.query.variant as string) || undefined;
+        const region = (req.header('x-region') || req.query.region) as string | undefined
+        const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress) as string | undefined;
+        const cookie = (req.query.cookie as any) || 'false'
+        const userId = (req?.user?.id as string)
+
+        const {url} = await MediaService.getStreamingUrl(id,mode,variantQuery,region,clientIp,cookie,userId)
         return res.json({url})
     } catch (err:any) {
         return res.status(400).json({message:err.message})
@@ -70,7 +78,6 @@ export async function getThumbnailAndWebVttData(req: Request, res: Response) {
          const media = await Media.findById(req.params.id);
   if (!media) return res.status(404).json({ message: 'not found' });
 
-  const bucket = process.env.MINIO_BUCKET!;
   const expires = 60 * 60; // 1 hour
 
   const thumbs = (media.thumbnails || []).map((key: string) => presignGet(key, expires));

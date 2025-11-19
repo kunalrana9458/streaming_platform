@@ -1,6 +1,5 @@
 
 import {Router} from 'express'
-import multer from 'multer'
 import { presignUpload,
          uploadComplete,
          getStreamingUrl,

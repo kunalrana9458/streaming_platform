@@ -343,3 +343,229 @@ These are MinIO object keys from which presigned URLs are generated.
 * Worker cleans all temporary directories after processing.
 
 ---
+
+# 📘 StreamSphere — Secure Delivery Layer & Media Streaming
+
+### **Daily Learning Log — 17 Nov 2025**
+
+This document summarizes everything learned and implemented today about building a **secure, production-grade OTT Delivery Layer**, including presigned streaming, CDN-based access control, delivery policies, and streaming variants.
+
+---
+
+# 🔥 1. What Was Implemented Today
+
+### ✅ DeliveryPolicy Model
+
+A per-asset policy that controls:
+
+* Allowed regions
+* Allowed IP ranges
+* Embargo (future release date)
+* Whether watermarked content is required
+
+### ✅ Delivery Route
+
+**`GET /delivery/media/:id/url`**
+This route:
+
+* Validates embargo
+* Checks region + IP
+* Chooses the correct video variant
+* Supports cookie-based CDN flow
+* Generates presigned GET URLs for streaming
+
+### ✅ CDN Mock (Local CDN Simulator)
+
+A local reverse-proxy that:
+
+* Validates signed cookies
+* Uses presigned URLs to fetch MinIO content
+* Streams playlist + segments using `pipe()`
+* Mimics real CDNs like Akamai/CloudFront
+
+### ✅ Full Understanding of Media Pipeline
+
+```
+POST /media/presign → Client uploads → POST /media/:id/complete → Worker processes
+→ Delivery route returns secure streaming URL → Client plays video
+```
+
+---
+
+# 🎬 2. How a User Finally Plays a Video
+
+Two streaming modes were learned and implemented:
+
+---
+
+## **A) Direct Presigned URL Flow**
+
+**Used for:** Mobile apps, local testing, simple clients
+
+1. Client calls:
+   `GET /delivery/media/:id/url`
+2. Delivery layer:
+
+   * Checks policy
+   * Picks the right variant
+   * Returns **presigned GET URL**
+3. Player streams video directly from MinIO using this URL.
+
+**Pros:** Simple, easy to test
+**Cons:** No CDN caching, URL exposes origin path (temporarily)
+
+---
+
+## **B) CDN + Signed Cookie Flow**
+
+**Used in production OTT platforms**
+
+1. Client calls:
+   `GET /delivery/media/:id/url?cookie=true`
+2. Delivery layer:
+
+   * Checks policy
+   * Creates **signed cookie**
+   * Returns CDN URL
+3. Player accesses:
+   `/cdn/:assetId/master.m3u8`
+4. CDN mock:
+
+   * Checks cookie
+   * Fetches origin using presigned URL
+   * Streams data back to player
+
+**Pros:**
+✔ CDN caching
+✔ No exposure of MinIO URLs
+✔ Tied to user/session
+✔ Industry-standard
+
+---
+
+# 🧠 3. Why DeliveryPolicy.assetId = Media._id
+
+Each Media asset needs policy rules.
+Therefore the DeliveryPolicy references the Media document:
+
+```
+DeliveryPolicy.assetId  → Media._id
+```
+
+This allows the Delivery route to quickly evaluate the rules for a specific media file.
+
+---
+
+# 🏗️ 4. Where to Create DeliveryPolicy (MOST IMPORTANT)
+
+✔ **Create DeliveryPolicy inside `POST /media/presign`**
+This is the moment you create the Media record — so it’s the perfect place to also attach a default DeliveryPolicy.
+
+**Do NOT create in**:
+
+* Worker
+* `/media/:id/complete`
+* Delivery routes
+
+Correct flow:
+
+```
+POST /media/presign  
+    → create Media  
+    → create DeliveryPolicy  
+    → return presigned PUT  
+```
+
+---
+
+# 🎞️ 5. Variant Selection Logic (Simple & Clean)
+
+When choosing a variant to stream:
+
+```
+1. If watermark is required → pick watermarked variant  
+2. If client requested variant → pick that  
+3. Else → pick first/best available variant  
+4. If no variants → fallback to original ONLY for download mode
+```
+
+This supports:
+
+```
+/delivery/media/:id/url?variant=1080p
+```
+
+---
+
+# 🔐 6. Cookie vs Presigned URL (Beginner-Friendly)
+
+### Presigned URL
+
+* Temporary access to object storage (MinIO/S3)
+* Expires after TTL
+* Used by mobile/testing
+
+### Signed Cookie
+
+* Given by Delivery route
+* Validated by CDN
+* Does NOT expose origin URL
+* Used in real OTT systems
+
+Developer advice:
+Base64 cookies are for DEV ONLY → use **HMAC + secret key** in production.
+
+---
+
+# 📡 7. CDN Mock Explained
+
+The CDN mock imitates a real CDN:
+
+1. Browser requests `/cdn/<assetId>/master.m3u8`
+2. CDN mock checks cookie (`cdn_token`)
+3. CDN mock uses presigned URL to fetch MinIO object:
+
+   ```js
+   const upstream = await fetch(minioPresignedUrl);
+   upstream.body.pipe(res);
+   ```
+4. Streams playlist and segments to player.
+
+This perfectly simulates:
+
+```
+Player → CDN → Origin (MinIO) → CDN → Player
+```
+
+---
+
+# 🧩 8. Key Concepts Learned Today
+
+### ✔ DeliveryPolicy
+
+### ✔ Variant selection logic
+
+### ✔ Embargo + regional restrictions
+
+### ✔ IP filtering
+
+### ✔ CDN cookie flow
+
+### ✔ Presigned GET URL generation
+
+### ✔ Worker → HLS → Delivery pipeline
+
+This gives your backend **real-world OTT-grade streaming security**.
+
+---
+
+# 📚 9. Today’s Complete Takeaways
+* DeliveryPolicy should always be created at `/media/presign`
+* Delivery route is the correct place for all policy checks
+* Worker is only for video processing, not policy logic
+* CDN mock allows local testing of production CDN behavior
+* Direct presigned URLs are simple but less secure
+* Cookie-based access is the true OTT standard
+* Variant selection is essential for ABR + watermark handling
+* Cookies should be signed with HMAC (not plain base64)
+---
