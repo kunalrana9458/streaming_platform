@@ -1,7 +1,11 @@
 
 import express, {Request,Response} from 'express'
 import { z } from 'zod'
-import { createCustomer } from './billing.service'
+import { 
+    createCustomer,
+    createCheckoutSession
+ } from './billing.service'
+import { tryCatch } from 'bullmq';
 
 export async function createCustomerController(req:any,res:Response) {
     try {
@@ -13,5 +17,26 @@ export async function createCustomerController(req:any,res:Response) {
         return res
                .status(400)
                .json({error:{code:'CUST_BILLING_CREATION_ERR',message:error.message}})
+    }
+}
+
+export async function createCheckoutSessionController(req:any,res:Response) {
+    try {
+        const { priceId,stripeCustomerId,successUrl,cancelUrl } = req.body
+
+        if(!priceId || !stripeCustomerId || !successUrl || !cancelUrl) {
+            return res.status(400).json({
+                message: 'ALL_FIELDS_REQUIRED'
+            })
+        }
+
+        const {url,id} = await createCheckoutSession(req.body)
+        return res.status(200).json({
+            url,
+            id
+        })
+    } catch (err:any) {
+        console.error('create-checkout-session err',err);
+        return res.status(500).json({ error:err.message })
     }
 }

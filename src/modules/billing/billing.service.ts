@@ -35,3 +35,21 @@ export async function createCustomer(authUserId:string) {
     })
     return local;
 }
+
+
+export async function createCheckoutSession(params:{priceId:string,stripeCustomerId:string,successUrl:string,cancelUrl:string}) {
+    const { priceId,stripeCustomerId,successUrl,cancelUrl } = params
+
+    if(!priceId) throw new Error('PRICEID_REQUIRED')
+    
+    const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        payment_method_types: ['card'],
+        line_items: [{price: priceId,quantity: 1}],
+        customer: stripeCustomerId ? stripeCustomerId : undefined,
+        success_url: successUrl,
+        cancel_url: cancelUrl
+    })
+
+    return {url:session.url,id:session.id}
+}
