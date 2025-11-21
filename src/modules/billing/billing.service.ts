@@ -1,0 +1,37 @@
+import mongoose from 'mongoose';
+import stripe from '../../lib/stripe';
+import User,{IUser} from '../auth/auth.model'
+import BillingCustomers,{IBillingCustomer} from './models/BillingCustomers';
+
+
+export async function createCustomer(authUserId:string) {
+    
+    let userRecord;
+    console.log("AUTH USER ID:",authUserId)
+    if(authUserId) userRecord = await User.findById(authUserId)
+    console.log('USER_RECORD_IS:',userRecord)
+    const email = (userRecord?.email)
+    const linkUserId = authUserId 
+
+    if(!email) throw new Error('EMAIL_NOT_FOUND')
+
+    // check if locally billing customer exists in the DB
+    let local = await BillingCustomers.findOne({email})
+    if(local) return local
+
+    // create stripe customer if customer locally not present
+    const stripeCustomer = await stripe.customers.create({
+        email,
+        metadata: {userId: linkUserId || 'unknown'}
+    });
+
+    console.log("STRIPE_CUTSOMER_",stripeCustomer)
+
+    local = await BillingCustomers.create({
+        userId: linkUserId,
+        email,
+        stripeCustomerId: stripeCustomer.id,
+        status: 'inactive'
+    })
+    return local;
+}

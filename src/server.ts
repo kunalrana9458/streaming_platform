@@ -8,6 +8,7 @@ import { getMetrics } from './observability/metrics'
 import authRoutes from './modules/auth/auth.routes'
 import catalogRoutes from './modules/catalog/catalog.routes'
 import mediaRoutes from './modules/media/media.routes'
+import billingRoutes from './modules/billing/billing.route'
 import { health,ready } from './observability/health'
 
 dotenv.config()
@@ -53,6 +54,7 @@ app.get('/', (_req, res) => { res.send('StreamSphere backend running !')})
 app.use('/auth',authRoutes)
 app.use('/catalog',catalogRoutes)
 app.use('/media',mediaRoutes)
+app.use('/billing',billingRoutes)
 
 const PORT = process.env.PORT || 5000   
 

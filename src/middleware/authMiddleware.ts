@@ -14,9 +14,11 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     if (!token) return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Missing token" } });
 
     const payload = jwt.verify(token, ACCESS_SECRET) as { sub: string; role: "user" | "admin" };
+    console.log(payload)
     req.user = { id: payload.sub, role: payload.role };
     next();
-  } catch {
+  } catch(error) {
+    console.log(error)
     return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } });
   }
 }
