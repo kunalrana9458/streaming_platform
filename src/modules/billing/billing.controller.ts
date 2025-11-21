@@ -3,7 +3,8 @@ import express, {Request,Response} from 'express'
 import { z } from 'zod'
 import { 
     createCustomer,
-    createCheckoutSession
+    createCheckoutSession,
+    seedPlan
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 
@@ -37,6 +38,22 @@ export async function createCheckoutSessionController(req:any,res:Response) {
         })
     } catch (err:any) {
         console.error('create-checkout-session err',err);
+        return res.status(500).json({ error:err.message })
+    }
+}
+
+
+export async function seedPlanController(req:any,res:Response) {
+    try {
+        const { priceId } = req.body
+        console.log("PRICE_ID_IS:",typeof priceId)
+        const plan = await seedPlan(priceId);
+        return res.status(200).json({
+            message: "Plan Seeded Successfully",
+            plan
+        })
+    } catch (err:any) {
+        console.error('seed-plan err:',err)
         return res.status(500).json({ error:err.message })
     }
 }

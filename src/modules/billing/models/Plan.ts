@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IPlan extends Document {
   priceId: string; // Stripe price_xxx
   name?: string;
-  amount?: number;
+  amount?: string;
   currency?: string;
   interval?: string;
   createdAt: Date;
@@ -13,7 +13,7 @@ export interface IPlan extends Document {
 const PlanSchema = new Schema<IPlan>({
   priceId: { type: String, required: true, unique: true },
   name: String,
-  amount: Number,
+  amount: String,
   currency: String,
   interval: String
 }, { timestamps: true });

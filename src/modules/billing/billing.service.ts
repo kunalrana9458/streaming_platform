@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import stripe from '../../lib/stripe';
 import User,{IUser} from '../auth/auth.model'
 import BillingCustomers,{IBillingCustomer} from './models/BillingCustomers';
-
+import Plan,{IPlan} from './models/Plan';
 
 export async function createCustomer(authUserId:string) {
     
@@ -52,4 +52,26 @@ export async function createCheckoutSession(params:{priceId:string,stripeCustome
     })
 
     return {url:session.url,id:session.id}
+}
+
+
+export async function seedPlan(priceId:string) {
+    if(!priceId) throw new Error('PRICEID_REQUIRED');
+
+    const price = await stripe.prices.retrieve(priceId,{expand: ['product']}) as any
+    console.log(price)
+    if(!price) throw new Error('PRICE_NOT_FOUND')
+
+    const existing = await Plan.findOne({ priceId })
+    if(existing) return existing
+
+    const plan = await Plan.create({
+        priceId,
+        name: price.nickname || (price.product && price.product.name) || 'unknown',
+        amount: price.currency,
+        currency: price.currency,
+        interval: price.recurring?.interval,
+    })
+
+    return plan
 }
