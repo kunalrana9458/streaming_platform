@@ -1,8 +1,10 @@
-import mongoose from 'mongoose';
+import mongoose, { Document, Mongoose } from 'mongoose';
 import stripe from '../../lib/stripe';
 import User,{IUser} from '../auth/auth.model'
 import BillingCustomers,{IBillingCustomer} from './models/BillingCustomers';
 import Plan,{IPlan} from './models/Plan';
+import BillingSubscription from './models/BillingSubscription';
+import { resendOTPHandler } from '../auth/auth-controller';
 
 export async function createCustomer(authUserId:string) {
     
@@ -74,4 +76,28 @@ export async function seedPlan(priceId:string) {
     })
 
     return plan
+}
+
+
+export async function billingStatus(userId:string) {
+    if(!userId) throw new Error('NOT_AUTHENTICATED')
+    const user = await User.findById(userId).select('_id email') ;
+
+    if(!user) throw new Error('USER_NOT_FOUND');
+
+    const billingCustomer = await BillingCustomers.findOne({ userId: user._id })
+    if(!billingCustomer) return { hasSubscription: false };
+
+    const sub = await BillingSubscription.findOne({ customerId: billingCustomer._id })
+    if(!sub) return { hasSubscription: false }
+
+    const now = new Date();
+    const active = sub.status;
+
+    return {
+        hasSubscription: !!active,
+        status: sub.status,
+        currentPeriodStart: sub.currentPeriodStart,
+        currentPeriodEnd: sub.currentPeriodEnd
+    }
 }

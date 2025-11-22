@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { 
     createCustomer,
     createCheckoutSession,
-    seedPlan
+    seedPlan,
+    billingStatus
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 
@@ -57,3 +58,17 @@ export async function seedPlanController(req:any,res:Response) {
         return res.status(500).json({ error:err.message })
     }
 }
+
+export async function billingStatusController(req: Request,res: Response) {
+    try {
+        const userId = (req as any).userId as string
+        const status = await billingStatus(userId);
+        return res.status(200).json({
+            status
+        })
+    } catch (err: any) {
+        console.error('illing Status Error',err);
+        return res.status(500).json({ error: err.message })
+    }
+}
+

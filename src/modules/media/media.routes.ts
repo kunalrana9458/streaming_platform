@@ -5,7 +5,8 @@ import { presignUpload,
          getStreamingUrl,
          getMediaById,
          getThumbnailAndWebVttData } from './media.controller'
-import { requireAuth,requireRole } from '../../middleware/authMiddleware'
+import { requireAuth,requireRole, } from '../../middleware/authMiddleware'
+import requireActiveSubscription from '../../middleware/requireActiveSubscription.middleware'
 
 const router = Router()
 
@@ -20,6 +21,7 @@ router.post('/:id/complete',
             uploadComplete)
 router.get('/:id/url',
             // requireAuth,
+            // requireActiveSubscription,
             getStreamingUrl)
 router.get('/:id',
     // requireAuth,
