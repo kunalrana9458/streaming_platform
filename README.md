@@ -569,3 +569,213 @@ This gives your backend **real-world OTT-grade streaming security**.
 * Variant selection is essential for ABR + watermark handling
 * Cookies should be signed with HMAC (not plain base64)
 ---
+
+
+# Streamsphere — Billing MVP
+
+Stripe Checkout + MongoDB (Mongoose, TypeScript) — minimal working Billing integration for Streamsphere.
+
+This module lets authenticated users create Stripe customers, open a Stripe Checkout (subscription) session, and keeps a minimal local mirror of Stripe objects via webhooks.
+
+---
+
+## **Included**
+
+### **TypeScript Mongoose Models**
+
+* BillingCustomer
+* Plan
+* BillingSubscription
+* BillingInvoice
+* WebhookEvent
+
+### **Express Route — `routes/billing.ts`**
+
+* `POST /api/billing/create-customer`
+* `POST /api/billing/create-checkout-session`
+* `POST /api/billing/seed-plan`
+* `POST /api/billing/webhook` (raw body, Stripe signature verified)
+
+### **Configs**
+
+* `.env.example`
+* `.gitignore`
+* README with Stripe CLI testing instructions
+
+This module expects your existing **User** model at `src/models/User` (adjust imports if needed) and your auth middleware to set `(req as any).userId`. If not available, the module will fall back to email/userId from request body.
+
+---
+
+## **Prerequisites**
+
+* Node.js >= 18
+* npm or yarn
+* MongoDB (local or cloud)
+* Stripe account (test mode)
+* Stripe CLI
+
+---
+
+## **Quick Start**
+
+### **Install dependencies**
+
+```bash
+npm install
+# or inside a larger project:
+npm install stripe express body-parser cookie-parser dotenv
+npm install -D @types/express @types/cookie-parser
+```
+
+### **Create `.env` from `.env.example`:**
+
+```
+PORT=4242
+MONGO_URI=mongodb://localhost:27017/streamsphere
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+BASE_URL=http://localhost:4242
+FRONTEND_URL=http://localhost:3000
+```
+
+### **Start server**
+
+```bash
+npm run dev
+# or
+node dist/server.js
+```
+
+---
+
+## **Stripe Setup (Test Mode)**
+
+1. Create Product + Price in Stripe Dashboard.
+2. Use a recurring price (monthly/yearly) → copy `price_xxx`.
+3. Seed the plan (optional):
+
+```bash
+curl -X POST http://localhost:4242/api/billing/seed-plan \
+  -H "Content-Type: application/json" \
+  -d '{"priceId":"price_xxx"}'
+```
+
+### **Create Checkout Session**
+
+```bash
+curl -X POST http://localhost:4242/api/billing/create-checkout-session \
+  -H "Content-Type: application/json" \
+  -d '{"priceId":"price_xxx"}'
+```
+
+This returns a URL — open it and pay using:
+
+```
+4242 4242 4242 4242
+```
+
+### **Forward Webhooks Locally**
+
+```bash
+stripe listen --forward-to localhost:4242/api/billing/webhook
+```
+
+Copy the `whsec_...` secret into `.env` → `STRIPE_WEBHOOK_SECRET`.
+Restart server.
+
+---
+
+## **Webhook Flow**
+
+The webhook handler processes:
+
+* `checkout.session.completed` → create subscription, attach plan
+* `invoice.payment_succeeded` → create invoice, mark subscription active
+* `invoice.payment_failed` → mark subscription past_due
+* `customer.subscription.updated` → update subscription data
+* `customer.subscription.deleted` → cancel subscription
+
+All events are saved in **WebhookEvent** for idempotency.
+
+---
+
+## **API Endpoints**
+
+### **POST /api/billing/create-customer**
+
+Body:
+
+```json
+{ "email": "?", "userId": "?" }
+```
+
+Uses `req.userId` automatically if authenticated.
+
+### **POST /api/billing/create-checkout-session**
+
+Body:
+
+```json
+{
+  "priceId": "price_xxx",
+  "stripeCustomerId": "optional",
+  "successUrl": "optional",
+  "cancelUrl": "optional"
+}
+```
+
+Response:
+
+```json
+{ "url": "https://checkout.stripe.com/...", "id": "cs_test_xxx" }
+```
+
+### **POST /api/billing/seed-plan**
+
+Body:
+
+```json
+{ "priceId": "price_xxx" }
+```
+
+Creates local plan from Stripe price.
+
+### **POST /api/billing/webhook**
+
+* Uses raw body
+* Verifies Stripe signature
+* Handles subscription lifecycle events
+
+---
+
+## **Models Summary**
+
+### **BillingCustomer**
+
+Mirror of Stripe customer linked to User.
+
+### **Plan**
+
+Mirror of Stripe Price.
+
+### **BillingSubscription**
+
+Mirror of Stripe subscription + period dates.
+
+### **BillingInvoice**
+
+Mirror of Stripe invoice.
+
+### **WebhookEvent**
+
+Stores raw events for audit + idempotency.
+
+---
+
+## **Notes**
+
+* Replace paths as needed for your project structure.
+* This module handles only minimal billing logic — upgrade/downgrade flows can be added later.
+
+---
+

@@ -9,6 +9,7 @@ import authRoutes from './modules/auth/auth.routes'
 import catalogRoutes from './modules/catalog/catalog.routes'
 import mediaRoutes from './modules/media/media.routes'
 import billingRoutes from './modules/billing/billing.route'
+import billingWebhookRoute from './modules/billing/webhook/billing_webhook.routes'
 import { health,ready } from './observability/health'
 
 dotenv.config()
@@ -16,6 +17,9 @@ dotenv.config()
 initSentry()
 const app = express()
 app.use(cors())
+
+app.use('/billing',billingWebhookRoute)
+
 app.use(express.json())
 
 

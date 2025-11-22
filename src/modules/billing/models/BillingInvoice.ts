@@ -12,7 +12,7 @@ export interface IBillingInvoice extends Document {
   updatedAt: Date;
 }
 
-const InvoiceSchema = new Schema<IBillingInvoice>({
+const BillingInvoiceSchema = new Schema<IBillingInvoice>({
   stripeInvoiceId: { type: String, unique: true },
   customerId: { type: Schema.Types.ObjectId, ref: 'BillingCustomer' },
   subscriptionId: { type: Schema.Types.ObjectId, ref: 'BillingSubscription' },
@@ -22,4 +22,4 @@ const InvoiceSchema = new Schema<IBillingInvoice>({
   hostedInvoiceUrl: String
 }, { timestamps: true });
 
-export default mongoose.model<IBillingInvoice>('BillingInvoice', InvoiceSchema);
+export default mongoose.model<IBillingInvoice>('BillingInvoice', BillingInvoiceSchema);
