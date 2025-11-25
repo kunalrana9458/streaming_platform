@@ -1,6 +1,5 @@
 import { Worker, Job } from "bullmq";
 import {
-  webhookQueue,
   connection,
   WEBHOOK_QUEUE_NAME,
 } from "../../../lib/queue";
