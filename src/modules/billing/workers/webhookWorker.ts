@@ -32,6 +32,9 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 
     if(stripeSubscriptionId) {
         const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId,{ expand: ['items.data.price'] }) as any;
+
+        console.log("Stripe Subscription Object is:",stripeSub);
+
         const price = stripeSub.items.data[0].price;
 
         let plan = await Plan.findOne({ priceId: price.id });
@@ -46,6 +49,10 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
             })
         }
 
+        // IMPORTANT: RELY ON INVOICE.PAYMENT_SUCCEEDED FOR ACCESS DATES.
+        // This event handles ALL subscription renewals, while checkout.session.completed  
+        // only handles the initial purchase. Update access_expires_at here.
+
         await BillingSubscription.updateOne(
             { stripeSubscriptionId: stripeSub.id },
             {
@@ -53,7 +60,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
                     customerId: bCustomer._id,
                     stripeSubscriptionId: stripeSub.id,
                     planId: plan._id,
-                    status: stripeSub.status,
+                    status: stripeSub.status, 
                     currentPeriodStart: stripeSub.current_period_start ? new Date(stripeSub.current_period_start * 1000) : undefined,
                     currentPeriodEnd: stripeSub.current_period_end ? new Date(stripeSub.current_period_end * 1000) : undefined
                 }
@@ -64,10 +71,13 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 }
 
 async function handleInvoicePaymentSucceeded(inv: any) {
-    const stripeInvoiceId = inv.id;
-    const stripeSubscriptionId = inv.subscription;
 
-    const localSub = await BillingSubscription.findOne({ stripeSubscriptionId });
+    console.log("INVOICE DETAILS ARE:",inv)
+
+    const stripeInvoiceId = inv.id;
+    const stripeSubscriptionId = inv.subscription;  // inv.parent.subscription_details.subscription
+
+    const localSub = await BillingSubscription.findOne({ stripeSubscriptionId }); 
     const customerId = localSub?.customerId || null;
 
     await BillingInvoice.updateOne(

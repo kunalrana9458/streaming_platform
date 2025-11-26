@@ -101,3 +101,37 @@ export async function billingStatus(userId:string) {
         currentPeriodEnd: sub.currentPeriodEnd
     }
 }
+
+export async function getPortal(userId: string){
+    const user = await User.findById(userId).select('_id email');
+
+    if(!user) throw new Error('USER_NOT_FOUND');
+
+    // Find billing customer by Id
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    let billingCustomer = await BillingCustomers.findOne({ userId: userObjectId });
+
+    // validate for the billing customer if not exist then create a new one
+    if(!billingCustomer){
+        const email = user.email;
+        const stripeCustomer = await stripe.customers.create({
+            email: email,
+        });
+
+        billingCustomer = await BillingCustomers.create({
+            userId: userId,
+            email: email,
+            stripeCustomerId: stripeCustomer.id,
+            status: 'inactive'
+        });
+    }
+
+    // create Billing Portal Session
+    const returnUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    const session = await stripe.billingPortal.sessions.create({
+        customer: billingCustomer.stripeCustomerId,
+        return_url: `${returnUrl}/account/billing`
+    })
+
+    return session.url;
+}

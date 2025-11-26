@@ -3,7 +3,8 @@ import {
   createCustomerController,
   createCheckoutSessionController,
   seedPlanController,
-  billingStatusController
+  billingStatusController,
+  getCustomerPortal
 } from "./billing.controller";
 import { requireAuth, requireRole } from "../../middleware/authMiddleware";
 
@@ -20,5 +21,8 @@ router.post('/seed-plan',seedPlanController)
 
 // used to get the status
 router.get('/status',billingStatusController)
+
+// Portal access for managing subscription for the customer
+router.get('/portal',requireAuth,getCustomerPortal)
 
 export default router;

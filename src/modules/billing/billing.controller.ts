@@ -5,7 +5,8 @@ import {
     createCustomer,
     createCheckoutSession,
     seedPlan,
-    billingStatus
+    billingStatus,
+    getPortal
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 
@@ -72,3 +73,20 @@ export async function billingStatusController(req: Request,res: Response) {
     }
 }
 
+export async function getCustomerPortal(req: Request,res: Response) {
+    try {
+        const userId = (req as any).user.id as string;
+
+        console.log("USER_ID IS:",userId)
+
+        if(!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+        
+        const result = await getPortal(userId);
+        return res.json({url: result});
+
+    } catch (err: any) {
+        return res.status(500).json({ error: err.message || 'Failed to create portal session' })
+    }
+}
