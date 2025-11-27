@@ -6,7 +6,8 @@ import {
     createCheckoutSession,
     seedPlan,
     billingStatus,
-    getPortal
+    getPortal,
+    resendPaymentUpdate
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 
@@ -88,5 +89,20 @@ export async function getCustomerPortal(req: Request,res: Response) {
 
     } catch (err: any) {
         return res.status(500).json({ error: err.message || 'Failed to create portal session' })
+    }
+}
+
+export async function resendPaymentUpdateController(req: Request,res: Response) {
+    try {
+        const userId = (req as any).user.id as string;
+
+        if(!userId) {
+            return res.status(404).json({ error: 'USER_ID_REQUIRED' })
+        }
+
+        const { ok,portalUrl } = await resendPaymentUpdate(userId)
+        return res.json({ok:ok, portalUrl:portalUrl})
+    } catch (err:any) {
+        return res.status(500).json({ error: err.message })
     }
 }
