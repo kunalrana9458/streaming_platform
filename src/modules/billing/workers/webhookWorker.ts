@@ -1,6 +1,7 @@
 import { Worker, Job } from "bullmq";
 import {
   connection,
+  emailQueue,
   WEBHOOK_QUEUE_NAME,
 } from "../../../lib/queue";
 import stripe from "../../../lib/stripe";
@@ -80,6 +81,19 @@ async function handleInvoicePaymentSucceeded(inv: any) {
     const localSub = await BillingSubscription.findOne({ stripeSubscriptionId }); 
     const customerId = localSub?.customerId || null;
 
+    const billingCustomer = customerId ? await BillingCustomers.findById(customerId) : null;
+
+    if(billingCustomer) {
+        await emailQueue.add('payment_succeeded',{
+            type: 'payment_succeeded',
+            to: billingCustomer.email,
+            name: billingCustomer.email,
+            amount_due: inv.amount_paid,
+            currency: inv.currency || 'INR',
+            invoice_id: inv.id
+        })
+    }
+
     await BillingInvoice.updateOne(
         { stripeInvoiceId },
         {
@@ -105,6 +119,27 @@ async function handleInvoicePaymentSucceeded(inv: any) {
 async function handleInvoicePaymentFailed(inv: any) {
     const stripeSubscriptionId = inv.subscription;
     const localSub = await BillingSubscription.findOne({ stripeSubscriptionId });
+    const customerId = localSub?.customerId || null;
+    const billingCustomer = customerId ? await BillingCustomers.findById(customerId) : null;
+
+    if(billingCustomer) {
+        // create the billing portal session to send with the email
+        const session = await stripe.billingPortal.sessions.create({
+            customer: billingCustomer.stripeCustomerId,
+            return_url: `${process.env.FRONTEND_URL}/account/billing`
+        })
+
+        await emailQueue.add('payment_failed', {
+            type: 'payment_failed',
+            to: billingCustomer.email,
+            name: billingCustomer.email,
+            amount_due: inv.amount_due,
+            currency: inv.currency || 'INR',
+            invoiceId: inv.id,
+            portalUrl: session.url
+        })
+
+    }
 
     if(localSub) {
         await BillingSubscription.updateOne({ _id: localSub._id },{ status: 'past_due' });
