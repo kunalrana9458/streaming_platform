@@ -7,7 +7,8 @@ import {
     seedPlan,
     billingStatus,
     getPortal,
-    resendPaymentUpdate
+    resendPaymentUpdate,
+    getSubscriptions
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 
@@ -104,5 +105,24 @@ export async function resendPaymentUpdateController(req: Request,res: Response) 
         return res.json({ok:ok, portalUrl:portalUrl})
     } catch (err:any) {
         return res.status(500).json({ error: err.message })
+    }
+}
+
+export async function getSubscriptionsController(req: Request,res: Response) {
+    try {
+        const page = Math.max(1,parseInt(String(req.query.page || '1')));
+        const limit = Math.min(200,Math.max(1,parseInt(String(req.query.limit || '5'))));
+        const status = req.query.status as string | undefined;
+        const email = req.query.email as string | undefined
+
+        console.log("BEFORE GET SUBSCRIPTION SERVICE CALLED")
+        const { subs,total } = await getSubscriptions({page,limit,status,email});
+        console.log("AFTER GET SUBSCRIPTION SERVICE CALLED")
+
+        return res.json({ page,limit,total,data:subs });
+
+    } catch (err: any) {
+        console.error('admin list subscription err',err);
+        return res.status(500).json({ error:err.message })
     }
 }

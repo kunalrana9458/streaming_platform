@@ -160,3 +160,29 @@ export async function resendPaymentUpdate(userId: string){
 
     return {ok:true,portalUrl: session.url}
 }
+
+export async function getSubscriptions(params: {page:number,limit:number,status:any,email:any}){
+
+    const { page,limit,status,email } = params
+    const filter: any = {};
+
+    if(status) filter.status = status;
+
+    // if email providedd then first that in the BillingCustomer Model
+    if(email) {
+        const customers = await BillingCustomers.find({ email: { $regex: `${email}`, $options: 'i' }}).select('_id')
+        const ids = customers.map(c => c._id);
+        filter.customerId = { $in: ids }
+    }
+
+    const total = await BillingSubscription.countDocuments(filter);
+    const subs = await BillingSubscription.find(filter)
+          .sort({ createdAt: -1 })
+          .skip((page-1)*limit)
+          .limit(limit)
+          .populate('customerId','email stripeCustomerId')
+          .populate('planId','priceId name amount interval');
+
+    return { total,subs }
+
+}

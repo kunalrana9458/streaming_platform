@@ -5,7 +5,8 @@ import {
   seedPlanController,
   billingStatusController,
   getCustomerPortal,
-  resendPaymentUpdateController
+  resendPaymentUpdateController,
+  getSubscriptionsController
 } from "./billing.controller";
 import { requireAuth, requireRole } from "../../middleware/authMiddleware";
 
@@ -28,5 +29,14 @@ router.get('/portal',requireAuth,getCustomerPortal)
 
 // generate and resend portal access utl
 router.get('/resend-payment-portal',resendPaymentUpdateController)
+
+/**
+ * Admin Routes for the subscription invoices
+ */
+router.get('/admin/subscriptions',
+  requireAuth,
+  // requireAuth('admin'),
+  getSubscriptionsController
+)
 
 export default router;

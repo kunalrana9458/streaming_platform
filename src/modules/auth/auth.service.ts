@@ -28,7 +28,7 @@ export async function sendEmail(to:string,subject:string,body:string) {
 export function signAccessToken(user: IUser) {
     console.log(ACCESS_SECRET)
   return jwt.sign(
-    { sub: user._id.toString(), role: user.role },
+    { sub: user._id.toString(), role: user.role, email: user.email },
     ACCESS_SECRET,
     { expiresIn: ACCESS_TTL }
   );
