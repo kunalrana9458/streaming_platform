@@ -7,6 +7,7 @@ import BillingSubscription from "./models/BillingSubscription";
 import BillingInvoice from "./models/BillingInvoice";
 import { resendOTPHandler } from "../auth/auth-controller";
 import { emailQueue } from "../../lib/queue";
+import WebhookEvent from "./models/WebhookEvent";
 
 export async function createCustomer(authUserId: string) {
   let userRecord;
@@ -229,4 +230,21 @@ export async function getInvoices(params: {
     .populate("customerId", "email stripeCustomerId");
 
     return { total,invoices }
+}
+
+export async function getWebhooks(params: {page:number,limit:number,processedFilter:any}){
+
+    const { page,limit,processedFilter } = params
+    const filter: any = {};
+
+    if(processedFilter === 'true') filter.processed = true;
+    if(processedFilter === 'false') filter.processed = false;
+
+    const total = await WebhookEvent.countDocuments(filter);
+    const events = await WebhookEvent.find(filter)
+            .sort({ receivedAt: -1,createdAt: -1 })
+            .skip((page-1)*limit)
+            .limit(limit)
+
+    return { total,events }
 }

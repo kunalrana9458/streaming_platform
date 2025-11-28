@@ -9,7 +9,8 @@ import {
     getPortal,
     resendPaymentUpdate,
     getSubscriptions,
-    getInvoices
+    getInvoices,
+    getWebhooks
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 import mongoose from 'mongoose';
@@ -143,5 +144,18 @@ export async function getInvoicesController(req: Request,res: Response) {
     } catch (err: any) {
         console.error('admin list invoices err',err);
         return res.status(500).json({ error: err.message })
+    }
+}
+
+export async function getWebhooksController(req: Request,res: Response) {
+    try {
+        const page = Math.max(1,parseInt(String(req.query.page || '1')));
+        const limit = Math.min(200,Math.max(1,parseInt(String(req.query.limit || '5'))));
+        const processedFilter = req.query.processed as string | undefined
+
+        const {total,events} = await getWebhooks({page,limit,processedFilter});
+        return res.json({ page,limit,total,data: events })
+    } catch (err:any) {
+        return res.status(500).json({ error:err.message })
     }
 }
