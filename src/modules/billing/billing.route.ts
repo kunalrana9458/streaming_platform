@@ -6,7 +6,8 @@ import {
   billingStatusController,
   getCustomerPortal,
   resendPaymentUpdateController,
-  getSubscriptionsController
+  getSubscriptionsController,
+  getInvoicesController
 } from "./billing.controller";
 import { requireAuth, requireRole } from "../../middleware/authMiddleware";
 
@@ -37,6 +38,11 @@ router.get('/admin/subscriptions',
   requireAuth,
   // requireAuth('admin'),
   getSubscriptionsController
+)
+
+router.get('/admin/invoices',
+  requireAuth,
+  getInvoicesController
 )
 
 export default router;

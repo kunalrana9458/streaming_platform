@@ -8,9 +8,12 @@ import {
     billingStatus,
     getPortal,
     resendPaymentUpdate,
-    getSubscriptions
+    getSubscriptions,
+    getInvoices
  } from './billing.service'
 import { tryCatch } from 'bullmq';
+import mongoose from 'mongoose';
+import BillingInvoice from './models/BillingInvoice';
 
 export async function createCustomerController(req:any,res:Response) {
     try {
@@ -124,5 +127,21 @@ export async function getSubscriptionsController(req: Request,res: Response) {
     } catch (err: any) {
         console.error('admin list subscription err',err);
         return res.status(500).json({ error:err.message })
+    }
+}
+
+export async function getInvoicesController(req: Request,res: Response) {
+    try {
+        const page = Math.max(1,parseInt(String(req.query.page || '1')));
+        const limit = Math.min(200,Math.max(1,parseInt(String(req.query.limit || '5'))));
+        const userId = req.query.userId as string | undefined;
+        const email = req.query.email as string | undefined;
+        
+        const { total,invoices } = await getInvoices({page,limit,userId,email})
+
+        return res.json({ page,limit,total,data: invoices});
+    } catch (err: any) {
+        console.error('admin list invoices err',err);
+        return res.status(500).json({ error: err.message })
     }
 }
