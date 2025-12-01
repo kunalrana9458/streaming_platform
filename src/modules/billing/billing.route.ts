@@ -8,7 +8,9 @@ import {
   resendPaymentUpdateController,
   getSubscriptionsController,
   getInvoicesController,
-  getWebhooksController
+  getWebhooksController,
+  replayWebhookController,
+  reprocessSubscription
 } from "./billing.controller";
 import { requireAuth, requireRole } from "../../middleware/authMiddleware";
 
@@ -49,6 +51,18 @@ router.get('/admin/invoices',
 router.get('/admin/webhooks',
   requireAuth,
   getWebhooksController
+)
+
+router.post('/admin/replay-webhook',
+  requireAuth,
+  requireRole('admin'),
+  replayWebhookController
+)
+
+router.post('/reprocess-subscription',
+  requireAuth,
+  requireRole('admin'),
+  reprocessSubscription
 )
 
 export default router;

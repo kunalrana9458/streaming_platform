@@ -10,7 +10,8 @@ import {
     resendPaymentUpdate,
     getSubscriptions,
     getInvoices,
-    getWebhooks
+    getWebhooks,
+    replayWebhook
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 import mongoose from 'mongoose';
@@ -158,4 +159,22 @@ export async function getWebhooksController(req: Request,res: Response) {
     } catch (err:any) {
         return res.status(500).json({ error:err.message })
     }
+}
+
+export async function replayWebhookController(req: Request,res: Response) {
+    try {
+        const { eventId } = req.body
+
+        if(!eventId) return res.status(400).json({ error: 'eventId required' });
+        const webEvent = await replayWebhook(eventId);
+
+        return res.json({ ok:webEvent.ok, message: webEvent.message})
+    } catch (err: any) {
+        console.error('admin replay webhook err',err);
+        return res.status(500).json({ error:err.message })
+    }
+}
+
+export async function reprocessSubscription(req: Request,res: Response) {
+
 }

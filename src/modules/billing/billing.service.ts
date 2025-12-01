@@ -6,8 +6,9 @@ import Plan, { IPlan } from "./models/Plan";
 import BillingSubscription from "./models/BillingSubscription";
 import BillingInvoice from "./models/BillingInvoice";
 import { resendOTPHandler } from "../auth/auth-controller";
-import { emailQueue } from "../../lib/queue";
+import { emailQueue,webhookQueue } from "../../lib/queue";
 import WebhookEvent from "./models/WebhookEvent";
+
 
 export async function createCustomer(authUserId: string) {
   let userRecord;
@@ -247,4 +248,19 @@ export async function getWebhooks(params: {page:number,limit:number,processedFil
             .limit(limit)
 
     return { total,events }
+}
+
+export async function replayWebhook(eventId: string) {
+  if(!eventId) throw new Error('EVENT_ID_REQUIRED');
+
+  const webEvent = await WebhookEvent.findOne({ stripeEventId: eventId });
+  if(!webEvent) throw new Error('WEBHOOK_EVENT_NOT_FOUND');
+
+  await webhookQueue.add(`replay-${eventId}`,{
+    eventId: webEvent.stripeEventId,
+    type: webEvent.type,
+    payload: webEvent.payload
+  },{removeOnComplete: true})
+
+  return {ok:true,message:'Webhook Replay enqueued'}
 }
