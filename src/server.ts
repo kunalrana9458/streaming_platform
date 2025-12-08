@@ -10,6 +10,7 @@ import catalogRoutes from './modules/catalog/catalog.routes'
 import mediaRoutes from './modules/media/media.routes'
 import billingRoutes from './modules/billing/billing.route'
 import billingWebhookRoute from './modules/billing/webhook/billing_webhook.routes'
+import elasticSearchRoutes from './elastic-testing.route'
 import { health,ready } from './observability/health'
 
 dotenv.config()
@@ -41,6 +42,7 @@ app.use((req,res,next) => {
 app.get('/health',health)
 app.get('/ready',ready)
 
+
 // metrics endpoint
 app.get('/metrics',async(req,res) => {
   try {
@@ -59,6 +61,7 @@ app.use('/auth',authRoutes)
 app.use('/catalog',catalogRoutes)
 app.use('/media',mediaRoutes)
 app.use('/billing',billingRoutes)
+app.use('/es',elasticSearchRoutes)
 
 const PORT = process.env.PORT || 5000   
 
