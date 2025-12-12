@@ -15,6 +15,8 @@ export const createTitleController = async (req: any, res: Response) => {
       type: z.enum(["movie", "series"]),
       name: z.string().min(1),
       description: z.string().optional(),
+      language: z.string().min(1),
+      isLive: z.boolean().optional(),
       genres: z.array(z.string()).optional(),
       releaseYear: z.number().optional(),
       thumbnailUrl: z.string().optional(),
