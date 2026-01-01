@@ -44,6 +44,8 @@ export const verifyOtp = async(req:Request,res:Response) => {
     }
 }
 
+
+
 export const resendOTPHandler = async(req:Request,res:Response) => {
     try {
         const body = z.object({email: z.string().email()}).parse(req.body)
@@ -55,6 +57,9 @@ export const resendOTPHandler = async(req:Request,res:Response) => {
     }
 }
 
+
+
+
 export const login = async(req:Request,res:Response) => {
     try {
         const body = z.object({
@@ -62,7 +67,13 @@ export const login = async(req:Request,res:Response) => {
             password: z.string().min(6)
         }).parse(req.body)
 
-        const {accessToken,refreshToken,user} = await loginWithEmail(body.email,body.password)
+        const {accessToken,refreshToken,user} = await loginWithEmail(
+                                                          body.email,
+                                                          body.password,
+                                                         {
+                                                            ipAddress: req.ip,
+                                                            userAgent: req.headers['user-agent'] || 'unknown'   
+                                                         });
 
         return res.json({
             accessToken,
@@ -76,6 +87,8 @@ export const login = async(req:Request,res:Response) => {
         return res.status(code).json({error:{code:e.message,message: 'Login failed'}})
     }
 }
+
+
 
 export const refresh = async (req:Request,res:Response) => {
     try {

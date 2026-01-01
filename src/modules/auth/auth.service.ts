@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 
 import User,{IUser} from './auth.model';
+import { SessionModel } from './session.model';
 dotenv.config();
 
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET!;
@@ -179,8 +180,23 @@ export async function verifyEmailOtp(params:{email:string;otp:string}) {
     return true
 }
 
+
+
+function parseDevice(userAgent:string):string {
+    if(!userAgent) return 'unknown Device';
+
+    if(userAgent.includes('Andriod')) return 'Android Device';
+    if(userAgent.includes('iPhone')) return 'iPhone Device';
+    if(userAgent.includes('iPad')) return 'iPad Device';
+    if(userAgent.includes('Windows')) return 'Windows PC';
+    if(userAgent.includes('Macintosh')) return 'Mac PC';    
+    if(userAgent.includes('Linux')) return 'Linux PC';
+
+    return 'unknown Device';
+}
+
 /** Login only if verified */
-export async function loginWithEmail(email:string,password:string) {
+export async function loginWithEmail(email:string,password:string,options?:{ipAddress?:string;userAgent?:string}) {
     const user = await User.findOne({email})
     if(!user) throw new Error('INVALID_CREDENTIALS')
     if(!user.isEmailVerified) throw new Error('EMAIL_NOT_VERIFIED')
@@ -190,6 +206,18 @@ export async function loginWithEmail(email:string,password:string) {
 
     const accessToken = signAccessToken(user)
     const refreshToken = signRefreshToken(user)
+    
+    // session creation for the user
+    await SessionModel.create({
+        userId: user._id,
+        refreshTokenHash: refreshToken,
+        deviceInfo: parseDevice(options?.userAgent || ''),
+        ipAddress: options?.ipAddress || '',
+        userAgent: options?.userAgent || '',
+        isActive: true,
+        lastUsedAt: new Date(),
+        expiresAt: new Date(Date.now() + 7*24*60*60*1000)
+    })
 
     return {accessToken,refreshToken,user}
 }
