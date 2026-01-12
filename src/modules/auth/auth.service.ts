@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import logger from '../../observability/logger';
 
 import User,{IUser} from './auth.model';
 import { SessionModel } from './session.model';
@@ -111,6 +112,9 @@ export async function createUserAndSendOtp(params:{name:string,email:string,pass
         isEmailVerified: false
     })
 
+    // success log for new user creation
+    logger.info(`New user registered: ${user._id} (${user.email})`);
+
     await issueAndEmailOtp(user)
     return user
 }
@@ -197,6 +201,9 @@ function parseDevice(userAgent:string):string {
 
 /** Login only if verified */
 export async function loginWithEmail(email:string,password:string,options?:{ipAddress?:string;userAgent?:string}) {
+
+    // checking user exist in the db or not
+    logger.info('Checking database for user during login');
     const user = await User.findOne({email})
     if(!user) throw new Error('INVALID_CREDENTIALS')
     if(!user.isEmailVerified) throw new Error('EMAIL_NOT_VERIFIED')

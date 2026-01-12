@@ -1,5 +1,5 @@
 import { Request,Response } from 'express'
-import { z } from 'zod'
+import { email, z } from 'zod'
 import { 
     createUserAndSendOtp,
     verifyEmailOtp,
@@ -13,6 +13,9 @@ import User from './auth.model'
 
 export const register = async(req:Request,res:Response) => {
     try {
+
+        req.log.info('Starting user registration process'); 
+
         const body = z.object({
             name: z.string().min(2),
             email: z.string().email(),
@@ -61,6 +64,9 @@ export const resendOTPHandler = async(req:Request,res:Response) => {
 
 
 export const login = async(req:Request,res:Response) => {
+
+    req.log.info({email:req.body.email},'Login attempt started');
+
     try {
         const body = z.object({
             email: z.string().email(),

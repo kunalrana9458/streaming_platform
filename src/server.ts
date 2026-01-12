@@ -12,6 +12,7 @@ import billingRoutes from './modules/billing/billing.route'
 import elasticSearchRoutes from './modules/elastic-search/es.routes'
 import billingWebhookRoute from './modules/billing/webhook/billing_webhook.routes'
 import { health,ready } from './observability/health'
+import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config()
 
@@ -35,6 +36,12 @@ mongoose
 
 // request logging middleware (minimal)
 app.use((req,res,next) => {
+
+  const requestId = req.headers['x-user-id'] || uuidv4();
+
+  // Attach a child logger to the request object
+  req.log = logger.child({requestId});
+
   logger.info({req:{method:req.method,url:req.url,headers:req.headers}},'http_request')
   next()
 })
