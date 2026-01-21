@@ -98,9 +98,14 @@ export function hashOtp(otp:string) {
     return crypto.createHash('sha256').update(otp).digest('hex')
 }
 
-export async function createUserAndSendOtp(params:{name:string,email:string,password:string}) {
+export async function createUserAndSendOtp(params:{name:string,email:string,password:string},log:any) {
+
+    log.info('Checking if user already exists');
     const existing= await User.findOne({email:params.email})
-    if(existing) throw new Error('EMAIL_ALREADY_EXISTS')
+    if(existing) {
+        log.warn('Email already Exists');
+        throw new Error('EMAIL_ALREADY_EXISTS')
+    }
 
     const passwordHash = await hashPassword(params.password)
 
@@ -113,15 +118,18 @@ export async function createUserAndSendOtp(params:{name:string,email:string,pass
     })
 
     // success log for new user creation
-    logger.info(`New user registered: ${user._id} (${user.email})`);
+    log.info(`New user registered: ${user._id} (${user.email})`);
 
-    await issueAndEmailOtp(user)
+    await issueAndEmailOtp(user,log)
+    log.info('OTP issued and email sent');
     return user
 }
 
-export async function issueAndEmailOtp(user: IUser){
+export async function issueAndEmailOtp(user: IUser,log: any){
     const otp = generateOTP()
     console.log("OTP IS:",otp)
+
+    log.info({userId: user._id},'OTP is storing in the database')
     user.otp = {
         codeHash: hashOtp(otp),
         expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60_000),
@@ -130,6 +138,7 @@ export async function issueAndEmailOtp(user: IUser){
     }
     await user.save()
 
+    log.info({userId: user._id},'Email with the OTP is send to the user')
     // await sendEmail(user.email,'Your StreamSphere verification code',
     //     `Your verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes.`
     // )

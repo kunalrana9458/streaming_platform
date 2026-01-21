@@ -22,16 +22,17 @@ export const register = async(req:Request,res:Response) => {
             password: z.string().min(6)
         }).parse(req.body)
 
-        await createUserAndSendOtp(body)
+        await createUserAndSendOtp(body,req.log)
         return res.json({message: 'Registered. OTP Sent to email.'})
     } catch (error:any) {
-        const code = error.message === 'EMAIL_ALREADY_EXISTS' ? 409 : 400
+        const code = error.message === 'EMAIL_ALREADY_EXISTS' ? 409 : 400;
+        req.log.info({error:error.message},'User registration failed');
         return res.status(code).json({error:{code:error.message || 'REGISTER_FAILED'}})
     }
 }
 
 export const verifyOtp = async(req:Request,res:Response) => {
-    try {
+    try {        
         const body = z.object({
             email: z.string().email(),
             otp: z.string().length(Number(process.env.OTP_LENGTH || 6))
