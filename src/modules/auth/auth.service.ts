@@ -312,8 +312,9 @@ export async function refreshTokens(oldRefresh:string,log:any) {
     return { accessToken,refreshToken,user }
 }
 
-export async function logout(userId: string){
+export async function logout(userId: string,log:any){
     // invalidate the all refersh token by bumping tokenVersion
-    await User.findByIdAndUpdate(userId,{$inc:{tokenVersion:1}})
+    await User.findByIdAndUpdate(userId,{$inc:{tokenVersion:1}});
+    log.info({userId},'User logged out successfully');
     return true
 }

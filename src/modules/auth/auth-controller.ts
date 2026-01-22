@@ -123,31 +123,36 @@ export const login = async(req:Request,res:Response) => {
 export const refresh = async (req:Request,res:Response) => {
     try {
         const body = z.object({refreshToken: z.string().min(10)}).parse(req.body)
-        console.log(body.refreshToken);
-        const { accessToken,refreshToken,user } = await refreshTokens(body.refreshToken,req.log)
+        req.log.info('Regenerating the Refresh and Access Token for token rotation')
+        const { accessToken,refreshToken,user } = await refreshTokens(body.refreshToken,req.log);
         return res.json({
             accessToken,
             refreshToken,
             user: {id: user._id, name:user.name, email: user.email,role: user.role}
         })
-    } catch (error) {
+    } catch (error:any) {
+        req.log.info({error:error.message,message:'Error in the token generation'})
         return res.status(401).json({error:{code:'INVALID_REFERSH',message: 'Invalid Refresh token'}})
     }
 }
 
 export const profile = async(req:any,res:Response) => {
     try {
+        req.log.info({userId: req.user.id},'Get the User profile Details')
         const user = await User.findById(req.user.id).select("_id name email role isEmailVerified createdAt")
         return res.json({user})
     } catch (error) {
+        req.log.info({userId: req.user.id},'Erorr in the getting user profile details');
         return res.status(400).json({error:{code:"NOT_FOUND",message:'User not found'}})
     }
 }
 
 export const logoutHandler = async(req:any,res:Response) => {
     try {
-        return await logout(req.user.id)
+        req.log.info({userId: req.user.id},'Logging Out the User');
+        return await logout(req.user.id,req.log)
     } catch (e) {
+        req.log.info('Error in the user logout');
         return res.status(400).json({error:{code:'LOGOUT_FAILED',message:'Unable to Logout'}})
     }
 }
