@@ -27,8 +27,9 @@ export async function sendEmail(to:string,subject:string,body:string) {
 
 
 
-export function signAccessToken(user: IUser) {
-    console.log(ACCESS_SECRET)
+export function signAccessToken(user: IUser,log:any) {
+
+  log.info({userId: user._id},'Signing Access Token for the User');
   return jwt.sign(
     { sub: user._id.toString(), role: user.role, email: user.email },
     ACCESS_SECRET,
@@ -36,7 +37,8 @@ export function signAccessToken(user: IUser) {
   );
 }
 
-export function signRefreshToken(user: IUser){
+export function signRefreshToken(user: IUser,log:any){
+    log.info({userId: user._id},'Signing Access Token for the User');
     return jwt.sign(
         { sub: user._id.toString(), tv: user.tokenVersion },
         REFRESH_SECRET,
@@ -144,13 +146,31 @@ export async function issueAndEmailOtp(user: IUser,log: any){
     // )
 }
 
-export async function resendOtp(email:string) {
+export async function resendOtp(email:string,log: any) {
     const user = await User.findOne({email})
-    if(!user) throw new Error('USER_NOT_FOUND')
-    if(user.isEmailVerified) throw new Error('ALREADY_VERIFIED')
+    if(!user) {
+        log.warn(
+            {email:email},
+            'User not found in the DB');
+        throw new Error('USER_NOT_FOUND');
+    }
+
+    if(user.isEmailVerified) {
+        log.warn(
+            {email: email},
+            'User email already verified'
+        );
+        throw new Error('ALREADY_VERIFIED');
+    }
 
     const currentResends = user.otp?.resendCount ?? 0
-    if(currentResends >= OTP_RESEND_LIMIT) throw new Error('RESEND_LIMIT_REACHED')
+    if(currentResends >= OTP_RESEND_LIMIT) {
+        log.warn(
+            {email:email},
+            'OTP Resend Limit Reached'
+        );
+        throw new Error('RESEND_LIMIT_REACHED');
+    }
 
     // bump count then issue new code
     user.otp = {
@@ -160,21 +180,38 @@ export async function resendOtp(email:string) {
         resendCount: currentResends + 1
     }
     await user.save()
-    await issueAndEmailOtp(user)
+    await issueAndEmailOtp(user,log)
     return true
 }
 
 
 /** Verify otp -> activate user */
-export async function verifyEmailOtp(params:{email:string;otp:string}) {
+export async function verifyEmailOtp(params:{email:string;otp:string},log:any) {
     const user = await User.findOne({email:params.email})
-    if(!user) throw new Error('USER_NOT_FOUND')
+    if(!user) {
+        log.warn({ email: params.email },'User not Found in DB');
+        throw new Error('USER_NOT_FOUND');
+    }
 
-    if(!user.otp?.codeHash || !user?.otp?.expiresAt) throw new Error('NO_OTP_ISSUED')
-    if(user.isEmailVerified) return true
+    if(!user.otp?.codeHash || !user?.otp?.expiresAt) {
+        log.warn('Error in OTP Issue')
+        throw new Error('NO_OTP_ISSUED')
+    }
+    
+    if(user.isEmailVerified) {
+        log.info('Email already verified');
+        return true;
+    }
 
-    if(user.otp?.attempts >= OTP_MAX_ATTEMPTS) throw new Error('OTP_MAX_ATTEMPTS')
-    if(user.otp?.expiresAt.getTime() < Date.now()) throw new Error('OTP_EXPIRED')
+    if(user.otp?.attempts >= OTP_MAX_ATTEMPTS) {
+        log.warn({ userId: user._id },'OTP Maximum attempt reached')
+        throw new Error('OTP_MAX_ATTEMPTS')
+    }
+
+    if(user.otp?.expiresAt.getTime() < Date.now()) {
+        log.warn({ userId: user._id },'OTP Expired');
+        throw new Error('OTP_EXPIRED')
+    }
 
     const providedHash = hashOtp(params.otp)
     const ok = providedHash === user.otp.codeHash 
@@ -183,14 +220,24 @@ export async function verifyEmailOtp(params:{email:string;otp:string}) {
 
     if(!ok){
         await user.save()
-        throw new Error('OTP_INVALID')
+        log.warn(
+         { 
+            userId: user._id, email: user.email
+         },'OTP is Invalid');
+        throw new Error('OTP_INVALID');
     }
 
     // Success -> verify , clear otp
     user.isEmailVerified = true
     user.otp = undefined
     await user.save()
-    return true
+
+    log.info(
+        { userId: user._id, email: user.email },
+        'Email verified successfully'
+    );
+
+    return true;
 }
 
 
@@ -209,21 +256,33 @@ function parseDevice(userAgent:string):string {
 }
 
 /** Login only if verified */
-export async function loginWithEmail(email:string,password:string,options?:{ipAddress?:string;userAgent?:string}) {
+export async function loginWithEmail(email:string,password:string,log:any,options?:{ipAddress?:string;userAgent?:string}) {
 
     // checking user exist in the db or not
-    logger.info('Checking database for user during login');
+    log.info({email},'Checking database for user during login');
     const user = await User.findOne({email})
-    if(!user) throw new Error('INVALID_CREDENTIALS')
-    if(!user.isEmailVerified) throw new Error('EMAIL_NOT_VERIFIED')
+    if(!user) {
+        log.info({email},'User with that credentials not exist');
+        throw new Error('INVALID_CREDENTIALS');
+    }
+    if(!user.isEmailVerified){
+        log.info({email},'Email is not verified');
+        throw new Error('EMAIL_NOT_VERIFIED')
+    }
     
     const ok = await verifyPassword(password,user.passwordHash)
-    if(!ok) throw new Error('INVALID_CREDENTIALS')
+    if(!ok) {
+        log.info({email},'Credentials provided is invalid');
+        throw new Error('INVALID_CREDENTIALS');
+    }
 
-    const accessToken = signAccessToken(user)
-    const refreshToken = signRefreshToken(user)
+    
+    log.info({email},'Assign of Access and Refresh Token');
+    const accessToken = signAccessToken(user,log);
+    const refreshToken = signRefreshToken(user,log);
     
     // session creation for the user
+    log.info({email},'Session creation for the user is started')
     await SessionModel.create({
         userId: user._id,
         refreshTokenHash: refreshToken,
@@ -238,7 +297,7 @@ export async function loginWithEmail(email:string,password:string,options?:{ipAd
     return {accessToken,refreshToken,user}
 }
 
-export async function refreshTokens(oldRefresh:string) {
+export async function refreshTokens(oldRefresh:string,log:any) {
     console.log("Before Verification of Refresh Token")
     const payload = verifyRefreshToken(oldRefresh)
     console.log("After Verification of Refresh Token")
@@ -247,8 +306,8 @@ export async function refreshTokens(oldRefresh:string) {
     if(user.tokenVersion !== payload.tv) throw new Error('INVALID_REFRESH_VERSION')
 
     // rotating the refresh token again and again for the more security
-    const accessToken = signAccessToken(user)
-    const refreshToken = signRefreshToken(user)
+    const accessToken = signAccessToken(user,log)
+    const refreshToken = signRefreshToken(user,log)
     
     return { accessToken,refreshToken,user }
 }

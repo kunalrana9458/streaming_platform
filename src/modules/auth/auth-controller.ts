@@ -10,6 +10,7 @@ import {
 } from './auth.service'
 
 import User from './auth.model'
+import { error } from 'console'
 
 export const register = async(req:Request,res:Response) => {
     try {
@@ -38,12 +39,20 @@ export const verifyOtp = async(req:Request,res:Response) => {
             otp: z.string().length(Number(process.env.OTP_LENGTH || 6))
         }).parse(req.body)
 
-        await verifyEmailOtp(body)
+        req.log.info('Starting OTP Verification process')
+
+        await verifyEmailOtp(body,req.log);
         return res.json({message: 'Email Verified Successfully'})
     } catch (e:any) {
         let status = 400
-        if(['USER_NOT_FOUND'].includes(e.message)) status = 404
-        if(['OTP_EXPIRED','OTP_INVALID','NO_OTP_ISSUED','OTP_MAX_ATTEMPTS'].includes(e.message)) status = 400
+        if(['USER_NOT_FOUND'].includes(e.message)) status = 404;
+        if(['OTP_EXPIRED','OTP_INVALID','NO_OTP_ISSUED','OTP_MAX_ATTEMPTS'].includes(e.message)) status = 400;
+
+        req.log.warn(
+            { error: e.message, email: req.body?.email },
+            'OTP Verification failed'
+        );
+
         return res.status(status).json({error:{code:e.message,message:'OTP Verification Failed'}})
     }
 }
@@ -52,11 +61,21 @@ export const verifyOtp = async(req:Request,res:Response) => {
 
 export const resendOTPHandler = async(req:Request,res:Response) => {
     try {
-        const body = z.object({email: z.string().email()}).parse(req.body)
-        await resendOtp(body.email)
+        const body = z.object({email: z.string().email()}).parse(req.body);
+        req.log.info(
+            { email: req.body?.email },
+            'OTP Resend Process Started'
+        )
+        await resendOtp(body.email,req.log)
         return res.json({message: 'OTP resent if allowed'})
     } catch (e:any) {
-        const code = e.message === 'USER_NOT_FOUND' ? 404 : 429
+        const code = e.message === 'USER_NOT_FOUND' ? 404 : 429;
+
+        req.log.warn(
+            { error: e.message, email: req.body?.email },
+            'OTP resends failed'
+        );
+
         return res.status(code).json({error:{code:e.message,message:'Cannot resend OTP'}})
     }
 }
@@ -77,10 +96,13 @@ export const login = async(req:Request,res:Response) => {
         const {accessToken,refreshToken,user} = await loginWithEmail(
                                                           body.email,
                                                           body.password,
+                                                          req.log,
                                                          {
                                                             ipAddress: req.ip,
-                                                            userAgent: req.headers['user-agent'] || 'unknown'   
+                                                            userAgent: req.headers['user-agent'] || 'unknown'
                                                          });
+
+        req.log.info({email},'User Logged in Successfully')                                                
 
         return res.json({
             accessToken,
@@ -91,6 +113,7 @@ export const login = async(req:Request,res:Response) => {
         let code = 400
         if(e.message === 'EMAIL_NOT_VERIFIED') code = 403
         if(e.message === 'INVALID_CREDENTIALS') code = 401
+        req.log.error({email,error:e.message || 'Login Failed'});
         return res.status(code).json({error:{code:e.message,message: 'Login failed'}})
     }
 }
@@ -101,7 +124,7 @@ export const refresh = async (req:Request,res:Response) => {
     try {
         const body = z.object({refreshToken: z.string().min(10)}).parse(req.body)
         console.log(body.refreshToken);
-        const { accessToken,refreshToken,user } = await refreshTokens(body.refreshToken)
+        const { accessToken,refreshToken,user } = await refreshTokens(body.refreshToken,req.log)
         return res.json({
             accessToken,
             refreshToken,
