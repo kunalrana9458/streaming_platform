@@ -3,19 +3,21 @@ import Title,{ITitle} from "./catalog.model";
 
 
 
-export async function createTitle(data: Partial<ITitle>){
-    const title = await Title.create(data)
+export async function createTitle(data: Partial<ITitle>,log:any){
+    const title = await Title.create(data);
+    log.info({titleId:title._id},'Catalog Created Successfully');
     return title
 }
 
 
 // this will be the Offset Based Pagination the another one can be Cursor Based Pagination
-export async function getAllTitles(page=1,limit=10){
+export async function getAllTitles(page=1,limit=10,log:any){
     const skip  = (page-1)*limit;
     const [titles,total] = await Promise.all([
         Title.find().skip(skip).limit(limit).sort({createdAt:-1}),
         Title.countDocuments()
-    ])
+    ]);
+    log.info('All catalog fetched Successfully')
     return {
         titles,
         total,
