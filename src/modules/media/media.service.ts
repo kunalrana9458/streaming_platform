@@ -1,112 +1,171 @@
-
-import Media,{IMedia} from './media.model'
-import  DeliveryPolicy, {IDeliveryPolicy} from '../delivery/delivery.model'
-import {presignGet,presignPut} from '../../lib/minio.client'
-import { mediaQueue } from '../../lib/queue'
-import { randomBytes } from 'crypto'
-
+import Media, { IMedia } from "./media.model";
+import DeliveryPolicy, { IDeliveryPolicy } from "../delivery/delivery.model";
+import { presignGet, presignPut } from "../../lib/minio.client";
+import { mediaQueue } from "../../lib/queue";
+import { randomBytes } from "crypto";
+import { file } from "zod";
 
 function makeObjectKey(filename: string) {
   // keep original extension, add random prefix for uniqueness
-  const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
-  const prefix = Date.now().toString(36) + '-' + randomBytes(4).toString('hex');
+  const ext = filename.includes(".")
+    ? filename.slice(filename.lastIndexOf("."))
+    : "";
+  const prefix = Date.now().toString(36) + "-" + randomBytes(4).toString("hex");
   return `${prefix}${ext}`;
 }
 
-
-
 // function to check the media Delivery is allowed to that region or not
 function regionAllowed(policy: any | null, region?: string): boolean {
-  if(!policy) return true;
-  if(policy.allowRegions && policy.allowRegions.length > 0) {
-    if(!region) return false
-    return policy.allowRegions.map((r:string) => r.toUpperCase()).includes(region.toUpperCase())
+  if (!policy) return true;
+  if (policy.allowRegions && policy.allowRegions.length > 0) {
+    if (!region) return false;
+    return policy.allowRegions
+      .map((r: string) => r.toUpperCase())
+      .includes(region.toUpperCase());
   }
   return true;
 }
 
-
 // function to check particular IP is allowed to access the content or not
-function ipAllowed(policy: any | null,ip?: string): boolean {
-  if(!policy) return true;
-  if(policy.allowIPs && policy.allowIPs.length > 0){
-    if(!ip) return false;
+function ipAllowed(policy: any | null, ip?: string): boolean {
+  if (!policy) return true;
+  if (policy.allowIPs && policy.allowIPs.length > 0) {
+    if (!ip) return false;
     // naive exact match; replace with cidr-check if needed
     return policy.allowIPs.includes(ip);
   }
   return true;
 }
 
-
-
 export const MediaService = {
-
-  async createPresignedUpload({ filename, titleId, uploaderId }: { filename: string; titleId: string; uploaderId?: string }) {
+  async createPresignedUpload(
+    {
+      filename,
+      titleId,
+      uploaderId,
+    }: { filename: string; titleId: string; uploaderId?: string },
+    log: any,
+  ) {
+    log.info(
+      { userId: uploaderId, filename, titleId },
+      `Creating presigned upload Key`,
+    );
     const objectKey = makeObjectKey(filename);
+    log.info(
+      { userId: uploaderId },
+      `Create entry in Media collection for objectKey: ${objectKey}`,
+    );
     const media = await Media.create({
       titleId,
       filename,
       objectKey,
       uploaderId,
-      status: 'upload_pending',
+      status: "upload_pending",
     });
-
     // create a DeliveryPolicy and point it to the MediaId
-    await DeliveryPolicy.create({assetId:media._id})
+    log.info(
+      { userId: uploaderId },
+      `Creating DeliveryPolicy for media ID: ${media._id}`,
+    );
+    await DeliveryPolicy.create({ assetId: media._id });
 
+    log.info(
+      { userId: uploaderId },
+      `Generating presigned PUT URL for objectKey: ${objectKey}`,
+    );
     const url = await presignPut(objectKey, 600); // 10 minutes
     return { media, presignedUrl: url, objectKey };
   },
 
-  async markUploadedAndEnqueue(mediaId:string){
-    const media = await Media.findById(mediaId)
-    if(!media) throw new Error('Media not found')
-    media.status = 'uploaded'
-    await media.save()
+  async markUploadedAndEnqueue(mediaId: string, log: any) {
+    const media = await Media.findById(mediaId);
+    if (!media) {
+      log.warn({ mediaId }, `markUploadedAndEnqueue: Media not found`);
+      throw new Error("Media Not Found");
+    }
+    media.status = "uploaded";
+    await media.save();
+    log.info({ mediaId }, `Media marked as uploaded in DB`);
 
     // add job to processing queue
-    await mediaQueue.add('process-media',{mediaId},{attempts:3,backoff:{type:'exponential',delay:5000}})
-    return media
+    log.info({ mediaId }, `Enqueuing media processing job`);
+    await mediaQueue.add(
+      "process-media",
+      { mediaId },
+      { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+    );
+    return media;
   },
-  
-  async getStreamingUrl(mediaId:string,mode: any,variantQuery: any,region: any,clientIP: any,cookie: any,userId: string) {
-    const media = await Media.findById(mediaId)
-    if(!media) throw new Error('Media Not Found')
-    if(media.status !== 'ready') throw new Error('Media not ready for streaming')
 
-    const policy = await DeliveryPolicy.findOne({assetId:media._id}).lean();
+  async getStreamingUrl(
+    mediaId: string,
+    mode: any,
+    variantQuery: any,
+    region: any,
+    clientIP: any,
+    cookie: any,
+    userId: string,
+    log: any,
+  ) {
+    log.info({ mediaId, userId }, "Streaming service started");
+
+    const media = await Media.findById(mediaId);
+    if (!media) {
+      log.warn({ mediaId }, "Media not found");
+
+      throw new Error("Media Not Found");
+    }
+    if (media.status !== "ready") {
+      log.warn({ mediaId, status: media.status }, "Media not ready");
+      throw new Error("Media not ready for streaming");
+    }
+
+    const policy = await DeliveryPolicy.findOne({ assetId: media._id }).lean();
 
     // Embargo
-    if(policy?.embargoUntil && new Date() < new Date(policy.embargoUntil)) {
-      return { error: 'asset_embargoed', data: policy.embargoUntil }
+    if (policy?.embargoUntil && new Date() < new Date(policy.embargoUntil)) {
+      log.warn(
+        { mediaId, embargoUntil: policy.embargoUntil },
+        "Media embargoed",
+      );
+
+      return { error: "asset_embargoed", data: policy.embargoUntil };
     }
 
     // Region/IP checks
-    if(!regionAllowed(policy,region)) return {error : 'region_not_allowed'}
-    if(!ipAllowed(policy,clientIP)) return { error: 'ip_not_allowed' } 
+    if (!regionAllowed(policy, region)) {
+      log.warn({ mediaId, region }, "Region not allowed");
 
-    const key = media.outputUrlKey || media.objectKey
-
-    if(cookie === 'true'){
-      const expires = Math.floor(Date.now() /1000) + 60*5;
-      const payload = `${userId || 'anon'}:${media._id}:${expires}`
-      const token = Buffer.from(payload).toString('base64')
-      return { cookie:{name: 'cdn_token', value: token, expires} }
+      return { error: "region_not_allowed" };
     }
-    
-    const url = await presignGet(key,600)
-    return {media,url}
+    if (!ipAllowed(policy, clientIP)) {
+      log.warn({ mediaId, clientIP }, "IP not allowed");
+
+      return { error: "ip_not_allowed" };
+    }
+
+    const key = media.outputUrlKey || media.objectKey;
+
+    if (cookie === "true") {
+      const expires = Math.floor(Date.now() / 1000) + 60 * 5;
+      const payload = `${userId || "anon"}:${media._id}:${expires}`;
+      const token = Buffer.from(payload).toString("base64");
+      log.info({ mediaId, userId }, "Streaming cookie generated");
+
+      return { cookie: { name: "cdn_token", value: token, expires } };
+    }
+
+    const url = await presignGet(key, 600);
+    log.info({ mediaId, userId }, "Presigned streaming URL generated");
+
+    return { media, url };
   },
 
-  async updateStatus(mediaId:string,status:IMedia['status']){
-    const m = await Media.findByIdAndUpdate(mediaId,{status},{new:true})
-    return m
-  }
-
-}
-
-
-
+  async updateStatus(mediaId: string, status: IMedia["status"]) {
+    const m = await Media.findByIdAndUpdate(mediaId, { status }, { new: true });
+    return m;
+  },
+};
 
 /*** ***************** Get Stream URL function with the watermark, Varient according to video quality */
 // utils/delivery.service.ts (or wherever you keep service code)
