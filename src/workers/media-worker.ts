@@ -17,8 +17,20 @@ import { Sentry } from '../observability/sentry';
 
 async function processJob(job: Job) {
   const { mediaId } = job.data as { mediaId: string };
+
+  const log = logger.child({
+    jobId: job.id,
+    jobName: job.name,
+    mediaId
+  });
+
+  log.info('Media processing job started');
+  
   const media = await Media.findById(mediaId);
-  if (!media) throw new Error('Media Not found');
+  if (!media) {
+    log.warn('Media not found');
+    throw new Error('Media Not found');
+  }
 
   const addLog = async (msg: string) => {
     await Media.updateOne(
@@ -40,7 +52,7 @@ async function processJob(job: Job) {
 
   try {
     // logs the job start
-    logger.info({jobId:job.id,mediaId},'job_start')
+    log.info('Downloading original media file');
     // 1 -> download original
     const srcPath = await downloadObjectToTemp(media.objectKey);
     await addLog(`Downloaded source: ${srcPath}`);
@@ -48,6 +60,7 @@ async function processJob(job: Job) {
     await job.updateProgress(25);
 
     // 2 -> transcode to HLS (single bitrate)
+    log.info('Transcoding video to HLS');
     const variantName = 'hls_2400k';
     // IMPORTANT: videoBitrate should be a video bitrate like '2400k', not '128k'
     const { masterPath } = await transcodeToHlsSingle(srcPath, workDir, {
@@ -62,6 +75,7 @@ async function processJob(job: Job) {
     await job.updateProgress(70);
 
     // 3 -> upload HLS directory to MinIO under hls/<mediaId>/
+    log.info('Uploading HLS output to MinIO');
     const hlsPrefix = `hls/${mediaId}`;
     await uploadDir(workDir, hlsPrefix);
     await addLog(`Uploaded HLS folder to MinIO at prefix: ${hlsPrefix}`);
@@ -70,6 +84,7 @@ async function processJob(job: Job) {
     const masterRelKey = path.posix.join(hlsPrefix, variantName, 'master.m3u8').replace(/\\/g, '/');
 
     // 4 -> generate thumbnails & sprite + vtt
+    log.info('Generating thumbnails and sprite');
     fs.mkdirSync(thumbWork, { recursive: true });
     await addLog(`Generating thumbnails in ${thumbWork}`);
 
@@ -80,6 +95,7 @@ async function processJob(job: Job) {
       await addLog(`Generated ${thumbs.length} thumbnails`);
     } catch (err) {
       // don't crash entire job for small thumbnail failure, but log and continue
+      log.warn({err},'Thumbnail generation failed');
       await addLog(`Thumbnail generation failed: ${(err as Error).message}`);
       thumbs = [];
     }
@@ -92,6 +108,7 @@ async function processJob(job: Job) {
       await generateSpriteAndVtt(thumbs, spriteLocal, vttLocal, { columns: 4, thumbWidth: 320, duration });
       await addLog(`Sprite + VTT generated: ${spriteLocal}, ${vttLocal}`);
     } catch (err) {
+      log.warn({err},'Sprite/VTT generation failed');
       await addLog(`Sprite/VTT generation failed: ${(err as Error).message}`);
     }
 
@@ -99,9 +116,10 @@ async function processJob(job: Job) {
     await job.updateProgress(85);
 
     // 5 -> upload thumbnails + sprite + vtt to MinIO under thumbnails/<mediaId>/
+    log.info('Uploading thumbnails to MinIO');
     const thumbPrefix = `thumbnails/${mediaId}`;
-
     const thumbKeys: string[] = [];
+
     for (const t of thumbs) {
       try {
         const key = `${thumbPrefix}/${path.basename(t)}`;
@@ -145,11 +163,14 @@ async function processJob(job: Job) {
 
     await job.updateProgress(100);
     await addLog(`Job finished: outputUrlKey=${masterRelKey}`);
+    log.info('Media Processing complete successfully');
     mediaJobsTotal.inc({status:'success'})
   } catch (err) {
     // add the metric when error occur
     mediaJobsTotal.inc({status:'failed'});
     Sentry.captureException(err);
+
+    log.error({err},'Media Processing job failed');
     // mark failed and record error
     const msg = (err as Error).message || String(err);
     await addLog(`Job failed: ${msg}`);
@@ -171,16 +192,17 @@ async function processJob(job: Job) {
 async function start() {
   // connect DB
   await connectDB();
+  logger.info('Media Worker started and DB connected');
 
   // create worker after DB connected
   const worker = new Worker(
     MEDIA_QUEUE_NAME,
     async (job: Job) => {
       try {
-        console.log(`[worker] started job ${job.id} of type ${job.name}`);
+        logger.info(`[worker] started job ${job.id} of type ${job.name}`);
         await processJob(job);
       } catch (error) {
-        console.error(`[worker] error processing job ${job.id}:`, error);
+        logger.error({error},`[worker] error processing job ${job.id}:`);
         throw error;
       }
     },
@@ -188,11 +210,14 @@ async function start() {
   );
 
   worker.on('failed', (job, err) => {
-    console.error('[worker] job failed', job?.id, err);
+    logger.error(
+      { jobId: job?.id,err },
+      'Worker job failed'
+    )
   });
 
   const shutdown = async () => {
-    console.log('Shutting down worker');
+    logger.info('Shutting down media worker');
     await worker.close();
     await disconnectDB();
     process.exit(0);
@@ -203,6 +228,6 @@ async function start() {
 }
 
 start().catch((err) => {
-  console.error('[worker] failed to start:', err);
+  logger.error({ err },'Worker failed to start');
   process.exit(1);
 });
