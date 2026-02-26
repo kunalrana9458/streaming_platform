@@ -131,7 +131,7 @@ export async function issueAndEmailOtp(user: IUser,log: any){
     const otp = generateOTP()
     console.log("OTP IS:",otp)
 
-    log.info({userId: user._id},'OTP is storing in the database')
+    log.info({userId: user._id,otp:otp},'OTP is storing in the database')
     user.otp = {
         codeHash: hashOtp(otp),
         expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60_000),
@@ -257,6 +257,9 @@ function parseDevice(userAgent:string):string {
 
 /** Login only if verified */
 export async function loginWithEmail(email:string,password:string,log:any,options?:{ipAddress?:string;userAgent?:string}) {
+
+    // debug
+    log.info("LOGIN DETAILS:",{email,password})
 
     // checking user exist in the db or not
     log.info({email},'Checking database for user during login');

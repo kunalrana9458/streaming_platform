@@ -34,6 +34,10 @@ export const register = async(req:Request,res:Response) => {
 
 export const verifyOtp = async(req:Request,res:Response) => {
     try {        
+
+        // debug
+        console.log("REQUEST BODY IS:",req.body)
+
         const body = z.object({
             email: z.string().email(),
             otp: z.string().length(Number(process.env.OTP_LENGTH || 6))

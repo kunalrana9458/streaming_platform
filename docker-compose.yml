@@ -28,15 +28,15 @@ services:
     ports:
       - "6379:6379"
 
-  es01:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
-    environment:
-      - node.name=es01
-      - cluster.name=es-docker
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-    ports:
-      - '9200:9200'
+  # es01:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+  #   environment:
+  #     - node.name=es01
+  #     - cluster.name=es-docker
+  #     - discovery.type=single-node
+  #     - xpack.security.enabled=false
+  #   ports:
+  #     - '9200:9200'
 
 volumes:
   mongo_data:
