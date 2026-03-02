@@ -106,7 +106,23 @@ export const login = async(req:Request,res:Response) => {
                                                             userAgent: req.headers['user-agent'] || 'unknown'
                                                          });
 
-        req.log.info({email},'User Logged in Successfully')                                                
+        req.log.info({email},'User Logged in Successfully');
+
+        res.cookie("accessToken",accessToken,{
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax",
+            path: "/",
+            maxAge: 15*60*1000
+        });
+        
+        res.cookie("refreshToken",refreshToken,{
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax",
+            path: "/",
+            maxAge: 7*24*60*60*1000
+        });
 
         return res.json({
             accessToken,
