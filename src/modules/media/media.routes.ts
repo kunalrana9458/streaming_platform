@@ -12,7 +12,7 @@ const router = Router()
 
 // admin-only upload
 router.post('/presign',
-            //  requireAuth,
+             requireAuth,
             //  requireRole('admin'),
              presignUpload)
 router.post('/:id/complete',
