@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import mongoose from 'mongoose'
+import cookieParser from 'cookie-parser';
 import { initSentry } from './observability/sentry'
 import logger from './observability/logger'
 import { getMetrics } from './observability/metrics'
@@ -25,7 +26,8 @@ app.use(cors({
 
 app.use('/billing',billingWebhookRoute)
 
-app.use(express.json())
+app.use(express.json());
+app.use(cookieParser());
 
 
 // Mongo connect

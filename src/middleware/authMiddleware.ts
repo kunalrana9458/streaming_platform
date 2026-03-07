@@ -9,8 +9,8 @@ export interface AuthRequest extends Request {
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    // const header = req.headers.authorization || "";
+    const token = req.cookies.accessToken; // fetch token from the cookie 
     if (!token) return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Missing token" } });
 
     const payload = jwt.verify(token, ACCESS_SECRET) as { sub: string; role: "user" | "admin" };
