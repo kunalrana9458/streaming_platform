@@ -18,12 +18,17 @@ import mongoose from 'mongoose';
 import BillingInvoice from './models/BillingInvoice';
 
 export async function createCustomerController(req:any,res:Response) {
+    const authUserId = (req as any).user.id as string | undefined;    
     try {
-        const authUserId = (req as any).user.id as string | undefined;    
-        const customer = await createCustomer(authUserId as string)
-
+        req.log.info('Creation of Customer Started for Stripe Customer Creation')
+        const customer = await createCustomer(authUserId as string,req.log)
+        req.log.info('Customer Created Successfully for the Stripe')
         return res.status(201).json({message:'Customer Created',customer})
     } catch (error:any) {
+        req.log.error(
+            { error , userId: authUserId },
+            'Stripe customer creation failed'
+        )
         return res
                .status(400)
                .json({error:{code:'CUST_BILLING_CREATION_ERR',message:error.message}})
@@ -31,22 +36,24 @@ export async function createCustomerController(req:any,res:Response) {
 }
 
 export async function createCheckoutSessionController(req:any,res:Response) {
+    const { priceId,stripeCustomerId,successUrl,cancelUrl } = req.body
     try {
-        const { priceId,stripeCustomerId,successUrl,cancelUrl } = req.body
 
         if(!priceId || !stripeCustomerId || !successUrl || !cancelUrl) {
+            req.log.error('All Fields required in Checkout session creation')
             return res.status(400).json({
                 message: 'ALL_FIELDS_REQUIRED'
             })
         }
 
-        const {url,id} = await createCheckoutSession(req.body)
+        req.log.info({ stripeCustomerId, priceId } ,'Checkout Session creation Service Called')
+        const {url,id} = await createCheckoutSession(req.body,req.log)
         return res.status(200).json({
             url,
             id
         })
     } catch (err:any) {
-        console.error('create-checkout-session err',err);
+        req.log.error({ stripeCustomerId, priceId, error: err.message },'Stripe Checkout Session creation Failed')
         return res.status(500).json({ error:err.message })
     }
 }

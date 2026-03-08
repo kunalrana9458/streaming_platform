@@ -10,11 +10,10 @@ import { emailQueue,webhookQueue } from "../../lib/queue";
 import WebhookEvent from "./models/WebhookEvent";
 
 
-export async function createCustomer(authUserId: string) {
+export async function createCustomer(authUserId: string,log:any) {
   let userRecord;
-  console.log("AUTH USER ID:", authUserId);
+  log.info({userId:authUserId},'Customer creation for Stripe Service Called');
   if (authUserId) userRecord = await User.findById(authUserId);
-  console.log("USER_RECORD_IS:", userRecord);
   const email = userRecord?.email;
   const linkUserId = authUserId;
 
@@ -22,15 +21,29 @@ export async function createCustomer(authUserId: string) {
 
   // check if locally billing customer exists in the DB
   let local = await BillingCustomers.findOne({ email });
-  if (local) return local;
+  if (local){
+    log.info(
+      { userId: authUserId, stripeCustomerId: local.stripeCustomerId },
+      'Billing Customer already exists'
+    )
+  };
 
   // create stripe customer if customer locally not present
+  log.info(
+    { userId: authUserId},
+    'Creating customer in stripe'
+  )
   const stripeCustomer = await stripe.customers.create({
     email,
     metadata: { userId: linkUserId || "unknown" },
   });
 
-  console.log("STRIPE_CUTSOMER_", stripeCustomer);
+  // console.log("STRIPE_CUTSOMER_", stripeCustomer);
+  log.info({
+    userId: authUserId,
+    stripeCustomerId: stripeCustomer.id
+  },
+    `Stripe Customer Created`)
 
   local = await BillingCustomers.create({
     userId: linkUserId,
@@ -38,6 +51,12 @@ export async function createCustomer(authUserId: string) {
     stripeCustomerId: stripeCustomer.id,
     status: "inactive",
   });
+
+  log.info({
+    userId: authUserId,
+    stripeCustomerId: stripeCustomer.id
+  },
+  'Billing Customer Saved in DB')
   return local;
 }
 
@@ -46,11 +65,15 @@ export async function createCheckoutSession(params: {
   stripeCustomerId: string;
   successUrl: string;
   cancelUrl: string;
-}) {
+}, log:any) {
   const { priceId, stripeCustomerId, successUrl, cancelUrl } = params;
 
-  if (!priceId) throw new Error("PRICEID_REQUIRED");
+  if (!priceId) {
+    log.error({ stripeCustomerId },'PriceID of Stripe is required for Checkout session creation')
+    throw new Error("PRICEID_REQUIRED")
+  };
 
+  log.info({ stripeCustomerId,priceId },'Stripe Checkout Session creation API Called');
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     payment_method_types: ["card"],
@@ -59,6 +82,10 @@ export async function createCheckoutSession(params: {
     success_url: successUrl,
     cancel_url: cancelUrl,
   });
+
+  log.info({ stripeCustomerId,priceId,
+             checkoutSessionId: session.id
+   },'Stripe Checkout Session created')
 
   return { url: session.url, id: session.id };
 }
