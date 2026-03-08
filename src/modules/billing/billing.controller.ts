@@ -60,29 +60,34 @@ export async function createCheckoutSessionController(req:any,res:Response) {
 
 
 export async function seedPlanController(req:any,res:Response) {
+    const { priceId } = req.body
     try {
-        const { priceId } = req.body
-        console.log("PRICE_ID_IS:",typeof priceId)
-        const plan = await seedPlan(priceId);
+        if(!priceId) {
+            req.log.info('PriceID is required');
+            throw new Error('PRICEID_NOT_EXIST');
+        }
+        req.log.info({priceId},'Plan Seeding Service Called');
+        const plan = await seedPlan(priceId,req.log);
         return res.status(200).json({
             message: "Plan Seeded Successfully",
             plan
         })
     } catch (err:any) {
-        console.error('seed-plan err:',err)
+        req.log.error({priceId,error: err.message},'Plan Seeding Failed')
         return res.status(500).json({ error:err.message })
     }
 }
 
 export async function billingStatusController(req: Request,res: Response) {
+    const userId = (req as any).userId as string
     try {
-        const userId = (req as any).userId as string
-        const status = await billingStatus(userId);
+        req.log.info({userId},'Billing Status Service Called')
+        const status = await billingStatus(userId,req.log);
         return res.status(200).json({
             status
         })
     } catch (err: any) {
-        console.error('illing Status Error',err);
+        req.log.error({userId, error: err.message},'Billing Status Fetching Failed');
         return res.status(500).json({ error: err.message })
     }
 }

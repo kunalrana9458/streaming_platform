@@ -90,18 +90,25 @@ export async function createCheckoutSession(params: {
   return { url: session.url, id: session.id };
 }
 
-export async function seedPlan(priceId: string) {
-  if (!priceId) throw new Error("PRICEID_REQUIRED");
+export async function seedPlan(priceId: string,log:any) {
 
+  log.info({priceId},'Stripe API Called For Plan retrieval');
   const price = (await stripe.prices.retrieve(priceId, {
     expand: ["product"],
   })) as any;
   console.log(price);
-  if (!price) throw new Error("PRICE_NOT_FOUND");
+  if (!price) {
+    log.error({priceId},'Plan Not Found in Stripe');
+    throw new Error('STRIPE_PLAN_NOT_FOUND');
+  }
 
   const existing = await Plan.findOne({ priceId });
-  if (existing) return existing;
+  if (existing){
+    log.warn({priceId},'Plan Already Seeded');
+    return existing;
+  };
 
+  log.info({priceId},'Plan Seeding in DB started')
   const plan = await Plan.create({
     priceId,
     name: price.nickname || (price.product && price.product.name) || "unknown",
@@ -109,29 +116,46 @@ export async function seedPlan(priceId: string) {
     currency: price.currency,
     interval: price.recurring?.interval,
   });
-
+  log.info({priceId},'Plan seeding is Successfull')
   return plan;
 }
 
-export async function billingStatus(userId: string) {
-  if (!userId) throw new Error("NOT_AUTHENTICATED");
+
+export async function billingStatus(userId: string,log:any) {
+  if (!userId){
+     log.error({userId},'User Not Authenticated`');
+     throw new Error("NOT_AUTHENTICATED");
+  }
   const user = await User.findById(userId).select("_id email");
 
-  if (!user) throw new Error("USER_NOT_FOUND");
+  if (!user){
+    log.warn({userId},'User Not Found')
+    throw new Error("USER_NOT_FOUND")
+  };
 
   const billingCustomer = await BillingCustomers.findOne({ userId: user._id });
-  if (!billingCustomer) return { hasSubscription: false };
+  if (!billingCustomer) {
+    log.info({userId},'User Not Found in Billing Customer')
+    return { hasSubscription: false }
+  };
 
   const sub = await BillingSubscription.findOne({
     customerId: billingCustomer._id,
   });
-  if (!sub) return { hasSubscription: false };
+  if (!sub) {
+    log.info({userId},'User not have any Subscription');
+    return { hasSubscription: false };
+  }
 
   const now = new Date();
-  const active = sub.status;
+  const active = sub.status === "active";
 
+  log.info(
+    {userId, subscriptionStatus: sub.status},
+    'Billing Status Fetched Successfully'
+  )
   return {
-    hasSubscription: !!active,
+    hasSubscription: active,
     status: sub.status,
     currentPeriodStart: sub.currentPeriodStart,
     currentPeriodEnd: sub.currentPeriodEnd,
