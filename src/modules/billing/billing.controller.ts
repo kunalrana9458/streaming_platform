@@ -156,12 +156,13 @@ export async function getInvoicesController(req: Request,res: Response) {
         const userId = req.query.userId as string | undefined;
         const email = req.query.email as string | undefined;
         
-        const { total,invoices } = await getInvoices({page,limit,userId,email})
+        req.log.info('Invoice Fetching Service Called');
+        const { total,invoices } = await getInvoices({page,limit,userId,email},req.log)
 
         return res.json({ page,limit,total,data: invoices});
     } catch (err: any) {
-        console.error('admin list invoices err',err);
-        return res.status(500).json({ error: err.message })
+        req.log.error({error: err},'Invoice Fetching Failed');
+        return res.status(500).json({ error: err.message });
     }
 }
 
@@ -171,23 +172,30 @@ export async function getWebhooksController(req: Request,res: Response) {
         const limit = Math.min(200,Math.max(1,parseInt(String(req.query.limit || '5'))));
         const processedFilter = req.query.processed as string | undefined
 
-        const {total,events} = await getWebhooks({page,limit,processedFilter});
+        req.log.info('Webhooks Fetching Service Called');
+        const {total,events} = await getWebhooks({page,limit,processedFilter},req.log);
         return res.json({ page,limit,total,data: events })
     } catch (err:any) {
+        req.log.error({error:err},'Webhook Fetching Failed');
         return res.status(500).json({ error:err.message })
     }
 }
 
 export async function replayWebhookController(req: Request,res: Response) {
+    const { eventId } = req.body
     try {
-        const { eventId } = req.body
 
-        if(!eventId) return res.status(400).json({ error: 'eventId required' });
-        const webEvent = await replayWebhook(eventId);
+        if(!eventId) {
+            req.log.warn({eventId},'EventID not Found');
+            return res.status(400).json({ error: 'eventId required' });
+        }
+
+        req.log.info({eventId},'Replay Webhook Service Called');
+        const webEvent = await replayWebhook(eventId,req.log);
 
         return res.json({ ok:webEvent.ok, message: webEvent.message})
     } catch (err: any) {
-        console.error('admin replay webhook err',err);
+        req.log.error({eventId},'Replay Webhook Failed');
         return res.status(500).json({ error:err.message })
     }
 }

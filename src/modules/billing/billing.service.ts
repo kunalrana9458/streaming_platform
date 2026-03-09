@@ -277,7 +277,7 @@ export async function getInvoices(params: {
   limit: number;
   userId: any;
   email: any;
-}) {
+},log: any) {
   const { page, limit, userId, email } = params;
   const filter: any = {};
 
@@ -291,17 +291,20 @@ export async function getInvoices(params: {
     filter.customerId = { $in: ids };
   }
 
+  log.info('Invoice Fetched Started')
   const total = await BillingInvoice.countDocuments(filter);
   const invoices = await BillingInvoice.find(filter)
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
     .populate("customerId", "email stripeCustomerId");
+  
+  log.info('Invoice Fetched Sucessfully');
 
-    return { total,invoices }
+  return { total,invoices }
 }
 
-export async function getWebhooks(params: {page:number,limit:number,processedFilter:any}){
+export async function getWebhooks(params: {page:number,limit:number,processedFilter:any},log: any){
 
     const { page,limit,processedFilter } = params
     const filter: any = {};
@@ -309,21 +312,29 @@ export async function getWebhooks(params: {page:number,limit:number,processedFil
     if(processedFilter === 'true') filter.processed = true;
     if(processedFilter === 'false') filter.processed = false;
 
+    log.info('Webhook Fetched Started');
     const total = await WebhookEvent.countDocuments(filter);
     const events = await WebhookEvent.find(filter)
             .sort({ receivedAt: -1,createdAt: -1 })
             .skip((page-1)*limit)
-            .limit(limit)
+            .limit(limit);
+
+    log.info('Webhook Fetched Successfully');
 
     return { total,events }
 }
 
-export async function replayWebhook(eventId: string) {
-  if(!eventId) throw new Error('EVENT_ID_REQUIRED');
+export async function replayWebhook(eventId: string,log: any) {
+
+  // if(!eventId) throw new Error('EVENT_ID_REQUIRED');
 
   const webEvent = await WebhookEvent.findOne({ stripeEventId: eventId });
-  if(!webEvent) throw new Error('WEBHOOK_EVENT_NOT_FOUND');
+  if(!webEvent) {
+    log.info({eventId},'Webhook Event Not Found in DB');
+    throw new Error('WEBHOOK_EVENT_NOT_FOUND');
+  }
 
+  log.info({eventId},'Webhook added to the Queue')
   await webhookQueue.add(`replay-${eventId}`,{
     eventId: webEvent.stripeEventId,
     type: webEvent.type,
