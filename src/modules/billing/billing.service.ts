@@ -162,10 +162,13 @@ export async function billingStatus(userId: string,log:any) {
   };
 }
 
-export async function getPortal(userId: string) {
+export async function getPortal(userId: string,log:any) {
   const user = await User.findById(userId).select("_id email");
 
-  if (!user) throw new Error("USER_NOT_FOUND");
+  if (!user) {
+    log.warn({userId},'User not Found for Get Billing Portal')
+    throw new Error("USER_NOT_FOUND");
+  }
 
   // Find billing customer by Id
   const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -175,6 +178,7 @@ export async function getPortal(userId: string) {
 
   // validate for the billing customer if not exist then create a new one
   if (!billingCustomer) {
+    log.info({userId},'Billing Customer creation')
     const email = user.email;
     const stripeCustomer = await stripe.customers.create({
       email: email,
@@ -190,28 +194,38 @@ export async function getPortal(userId: string) {
 
   // create Billing Portal Session
   const returnUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
+  log.info({userId},'Stripe API Called for Billing Session Creation');
+
   const session = await stripe.billingPortal.sessions.create({
     customer: billingCustomer.stripeCustomerId,
     return_url: `${returnUrl}/account/billing`,
   });
 
+  log.info({userId},'Billing Portal Session created');
   return session.url;
 }
 
-export async function resendPaymentUpdate(userId: string) {
+export async function resendPaymentUpdate(userId: string,log:any) {
   const userObjectId = new mongoose.Types.ObjectId(userId);
   const billingCustomer = await BillingCustomers.findOne({
     userId: userObjectId,
   });
 
-  if (!billingCustomer) throw new Error("Billing Customer Not found");
+  if (!billingCustomer) {
+    log.warn({userId},'Billing Customer Not Found');
+    throw new Error("Billing Customer Not found");
+  }
 
   // create a billing portal session using the stripe
   const returnUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+
+  log.info({userId},'Stripe API For Billing Portal Creation called');
   const session = await stripe.billingPortal.sessions.create({
     customer: billingCustomer.stripeCustomerId,
     return_url: `${returnUrl}/account/billing`,
   });
+
+  log.info({userId},'Resend Payment for Billing Portal created')
 
   // Enqueue email JOB
   await emailQueue.add("payment_update", {
@@ -229,7 +243,7 @@ export async function getSubscriptions(params: {
   limit: number;
   status: any;
   email: any;
-}) {
+},log:any) {
   const { page, limit, status, email } = params;
   const filter: any = {};
 
@@ -244,6 +258,7 @@ export async function getSubscriptions(params: {
     filter.customerId = { $in: ids };
   }
 
+  log.info('Subscription Fetching Started')
   const total = await BillingSubscription.countDocuments(filter);
   const subs = await BillingSubscription.find(filter)
     .sort({ createdAt: -1 })
@@ -251,6 +266,8 @@ export async function getSubscriptions(params: {
     .limit(limit)
     .populate("customerId", "email stripeCustomerId")
     .populate("planId", "priceId name amount interval");
+
+  log.info('Subscription Fetched Successfully');
 
   return { total, subs };
 }

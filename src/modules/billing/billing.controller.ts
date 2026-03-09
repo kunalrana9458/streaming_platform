@@ -93,34 +93,39 @@ export async function billingStatusController(req: Request,res: Response) {
 }
 
 export async function getCustomerPortal(req: Request,res: Response) {
+    const userId = (req as any).user.id as string;
     try {
-        const userId = (req as any).user.id as string;
-
-        console.log("USER_ID IS:",userId)
 
         if(!userId) {
+            req.log.warn({ userId },'Unauthenticated User');
             return res.status(401).json({ error: 'Unauthorized' })
         }
         
-        const result = await getPortal(userId);
+        req.log.info({userId},'Billing Portal Service Called');
+        const result = await getPortal(userId,req.log);
         return res.json({url: result});
 
     } catch (err: any) {
+        req.log.error({userId},'Billing Portal Url Getting Failed')
         return res.status(500).json({ error: err.message || 'Failed to create portal session' })
     }
 }
 
 export async function resendPaymentUpdateController(req: Request,res: Response) {
+    const userId = (req as any).user.id as string;
     try {
-        const userId = (req as any).user.id as string;
 
         if(!userId) {
+            req.log.warn({userId},'Unauthenticated User')
             return res.status(404).json({ error: 'USER_ID_REQUIRED' })
         }
 
-        const { ok,portalUrl } = await resendPaymentUpdate(userId)
-        return res.json({ok:ok, portalUrl:portalUrl})
+        req.log.info({userId},'Resend Payment Update Service called')
+        const { ok,portalUrl } = await resendPaymentUpdate(userId,req.log)
+        return res.json({ok:ok, portalUrl:portalUrl});
+
     } catch (err:any) {
+        req.log.error({userId,error:err},'Resend Payment Billing Failed')
         return res.status(500).json({ error: err.message })
     }
 }
@@ -132,14 +137,14 @@ export async function getSubscriptionsController(req: Request,res: Response) {
         const status = req.query.status as string | undefined;
         const email = req.query.email as string | undefined
 
-        console.log("BEFORE GET SUBSCRIPTION SERVICE CALLED")
-        const { subs,total } = await getSubscriptions({page,limit,status,email});
+        req.log.info('Subscription Fetching Service Called');
+        const { subs,total } = await getSubscriptions({page,limit,status,email},req.log);
         console.log("AFTER GET SUBSCRIPTION SERVICE CALLED")
 
         return res.json({ page,limit,total,data:subs });
 
     } catch (err: any) {
-        console.error('admin list subscription err',err);
+        req.log.error({error:err},'Subscription Fetching Failed');
         return res.status(500).json({ error:err.message })
     }
 }
