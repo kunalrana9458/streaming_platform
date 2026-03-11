@@ -26,7 +26,7 @@ router.post('/create-checkout-session',createCheckoutSessionController)
 router.post('/seed-plan',seedPlanController)
 
 // used to get the status
-router.get('/status',billingStatusController)
+router.get('/status',requireAuth,billingStatusController)
 
 // Portal access for managing subscription for the customer
 router.get('/portal',requireAuth,getCustomerPortal)

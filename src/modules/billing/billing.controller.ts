@@ -79,7 +79,7 @@ export async function seedPlanController(req:any,res:Response) {
 }
 
 export async function billingStatusController(req: Request,res: Response) {
-    const userId = (req as any).userId as string
+    const userId = (req as any).user.id as string
     try {
         req.log.info({userId},'Billing Status Service Called')
         const status = await billingStatus(userId,req.log);
