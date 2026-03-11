@@ -25,7 +25,8 @@ export async function createCustomer(authUserId: string,log:any) {
     log.info(
       { userId: authUserId, stripeCustomerId: local.stripeCustomerId },
       'Billing Customer already exists'
-    )
+    );
+    return ;
   };
 
   // create stripe customer if customer locally not present
