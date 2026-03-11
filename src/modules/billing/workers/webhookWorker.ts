@@ -232,19 +232,28 @@ async function handleInvoicePaymentSucceeded(inv: any,eventId: string) {
     }
 }
 
-async function handleInvoicePaymentFailed(inv: any) {
+async function handleInvoicePaymentFailed(inv: any,eventId: string) {
     const stripeSubscriptionId = inv.subscription;
     const localSub = await BillingSubscription.findOne({ stripeSubscriptionId });
     const customerId = localSub?.customerId || null;
     const billingCustomer = customerId ? await BillingCustomers.findById(customerId) : null;
 
+    const logContext = {
+        customerId,
+        stripeSubscriptionId
+    };
+
+    logger.info(logContext,'invoice.payment_failed event received');
+
     if(billingCustomer) {
         // create the billing portal session to send with the email
+        logger.info(logContext,'Billing Portal Creation and send via email');
         const session = await stripe.billingPortal.sessions.create({
             customer: billingCustomer.stripeCustomerId,
             return_url: `${process.env.FRONTEND_URL}/account/billing`
         })
 
+        logger.info(logContext,'Adding Payment Failed Job to the Queue');
         await emailQueue.add('payment_failed', {
             type: 'payment_failed',
             to: billingCustomer.email,
@@ -258,22 +267,32 @@ async function handleInvoicePaymentFailed(inv: any) {
     }
 
     if(localSub) {
+        logger.info(logContext,'Update the Status in Billing Subscription');
         await BillingSubscription.updateOne({ _id: localSub._id },{ status: 'past_due' });
         if(localSub.customerId) await BillingCustomers.updateOne({_id: localSub.customerId},{ status: 'past_due'})
     }
 }
 
 async function handleSubscriptionUpdatedOrDeleted(sub: any) {
-    await BillingSubscription.updateOne(
-        { stripeSubscriptionId: sub.id },
-        {
-            $set: {
-                status: sub.status,
-                currentPeriodStart: sub.current_period_start ? new Date(sub.current_period_start*1000) : undefined,
-                currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end) : undefined
+    try {
+        logger.info({subscriptionId:sub.id},
+                    'customer.subscription.updated or .deleted event received');
+
+        logger.info({subscriptionId:sub.id},'Update the Subscription Status in DB');
+        await BillingSubscription.updateOne(
+            { stripeSubscriptionId: sub.id },
+            {
+                $set: {
+                    status: sub.status,
+                    currentPeriodStart: sub.current_period_start ? new Date(sub.current_period_start*1000) : undefined,
+                    currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end) : undefined
+                }
             }
-        }
-    )
+        );
+    } catch (error) {
+        logger.error({subscriptionId:sub.id},'Updation or Deletion of Subscrption Failed');
+        throw error;
+    }
 }
 
 
@@ -301,7 +320,7 @@ async function processJob(job: Job) {
                 break;
                 
             case 'invoice.payment_failed':
-                await handleInvoicePaymentFailed(payload as any)
+                await handleInvoicePaymentFailed(payload as any,eventId)
                 break;
 
             case 'customer.subscription.updated':
