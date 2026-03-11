@@ -1,4 +1,4 @@
-import { Worker, Job } from "bullmq";
+import { Worker, Job, tryCatch } from "bullmq";
 import {
   connection,
   emailQueue,
@@ -12,47 +12,93 @@ import BillingCustomers from "../models/BillingCustomers";
 import Plan from "../models/Plan";
 import BillingSubscription from "../models/BillingSubscription";
 import BillingInvoice from "../models/BillingInvoice";
+import logger from "../../../observability/logger";
 
 
-async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+
+
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session,eventId: string) {
+
+   
+
+    logger.info({stripeCustomerId: session.customer,
+                 stripeSubscriptionId: session.subscription,
+                 eventId},
+                'Checkout Session Completed Function Called')
 
     const stripeCustomerId = session.customer as string | undefined;
     const stripeSubscriptionId = session.subscription as string | undefined;
 
+    const longContext = {
+        eventId,
+        stripeCustomerId,
+        stripeSubscriptionId
+    }
+
     // ensure the billing customer must be exist
+    logger.info(longContext,
+                'checkout.session.completed event received');
+
+    logger.info(longContext,'Checking Billing customer in DB');
+
     let bCustomer = stripeCustomerId ? await BillingCustomers.findOne({ stripeCustomerId }) : null;
 
     if(!bCustomer) {
         const email = session.customer_details?.email || session.customer_email;
+        logger.info({longContext,email},
+                    'Billing Customer not Found, creating new customer'
+        );
+
         bCustomer = await BillingCustomers.create({
             email: email || 'unknown',
             stripeCustomerId: stripeCustomerId || 'unknown',
             status: 'inactive'
-        })
+        });
+
+        logger.info(
+            {longContext,billingCustomerId: bCustomer._id},
+            'Billing customer created'
+        );
     }
 
     if(stripeSubscriptionId) {
-        const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId,{ expand: ['items.data.price'] }) as any;
 
-        console.log("Stripe Subscription Object is:",stripeSub);
+        logger.info(longContext,'Fetching stripe subscription');
+        const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId,{ expand: ['items.data.price'] }) as any;
 
         const price = stripeSub.items.data[0].price;
 
         let plan = await Plan.findOne({ priceId: price.id });
 
         if(!plan) {
+
+            logger.info(
+                {...longContext,priceId: price.id},
+                'Plan not Found, creating new plan'
+            );
+
             plan = await Plan.create({  
                 priceId: price.id,
                 name: price.nickname || (price.product && price.product.name) || 'unknown',
                 amount: price.unit_amount,
                 currency: price.currency,
                 interval: price.recurring?.interval 
-            })
+            });
+
+            logger.info(
+                { ...longContext,planId: plan._id },
+                'Plan created'
+            );
         }
 
         // IMPORTANT: RELY ON INVOICE.PAYMENT_SUCCEEDED FOR ACCESS DATES.
         // This event handles ALL subscription renewals, while checkout.session.completed  
         // only handles the initial purchase. Update access_expires_at here.
+
+        logger.info(
+            { ...longContext, planId: plan._id },
+            "Updating billing subscription"
+        );
 
         await BillingSubscription.updateOne(
             { stripeSubscriptionId: stripeSub.id },
@@ -68,51 +114,121 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
             },
             { upsert: true }
         );
+
+        logger.info(
+            {...longContext, subscriptionId: stripeSub.id},
+            'Billing subscription updated successfully'
+        )
     }
 }
 
-async function handleInvoicePaymentSucceeded(inv: any) {
+async function handleInvoicePaymentSucceeded(inv: any,eventId: string) {
 
-    console.log("INVOICE DETAILS ARE:",inv)
-
+    
     const stripeInvoiceId = inv.id;
     const stripeSubscriptionId = inv.subscription;  // inv.parent.subscription_details.subscription
 
-    const localSub = await BillingSubscription.findOne({ stripeSubscriptionId }); 
-    const customerId = localSub?.customerId || null;
-
-    const billingCustomer = customerId ? await BillingCustomers.findById(customerId) : null;
-
-    if(billingCustomer) {
-        await emailQueue.add('payment_succeeded',{
-            type: 'payment_succeeded',
-            to: billingCustomer.email,
-            name: billingCustomer.email,
-            amount_due: inv.amount_paid,
-            currency: inv.currency || 'INR',
-            invoice_id: inv.id
-        })
+    const logContext = {
+        eventId,
+        stripeInvoiceId,
+        stripeSubscriptionId
     }
+    logger.info(logContext,'invoice.payment_succeeded event received');
 
-    await BillingInvoice.updateOne(
-        { stripeInvoiceId },
-        {
-            $set: {
-                stripeInvoiceId,
-                customerId,
-                subscriptionId: localSub?._id || null,
-                amountDue: inv.amount_due,
-                amountPaid: inv.amount_paid,
-                status: inv.status,
-                hostedInvoiceUrl: inv.hosted_invoice_url || '',
+    try {
+
+        logger.info(
+            {...logContext},
+            'Fetching local subscription'
+        )
+
+        const localSub = await BillingSubscription.findOne({ stripeSubscriptionId }); 
+        const customerId = localSub?.customerId || null;
+
+        logger.info(
+            { ...logContext,customerId },
+            'Subscription lookup completed'
+        );
+
+        const billingCustomer = customerId ? await BillingCustomers.findById(customerId) : null;
+
+        if(billingCustomer) {
+
+            logger.info(
+                {...logContext,email: billingCustomer.email},
+                'Adding payment success email job to queue'
+            )
+
+            await emailQueue.add('payment_succeeded',{
+                type: 'payment_succeeded',
+                to: billingCustomer.email,
+                name: billingCustomer.email,
+                amount_due: inv.amount_paid,
+                currency: inv.currency || 'INR',
+                invoice_id: inv.id
+            })
+
+            logger.info(
+                { ...logContext, email: billingCustomer.email },
+                "Payment success email job queued"
+            );
+        }
+
+        logger.info(logContext,'Upserting billing Invoice');
+
+        await BillingInvoice.updateOne(
+            { stripeInvoiceId },
+            {
+                $set: {
+                    stripeInvoiceId,
+                    customerId,
+                    subscriptionId: localSub?._id || null,
+                    amountDue: inv.amount_due,
+                    amountPaid: inv.amount_paid,
+                    status: inv.status,
+                    hostedInvoiceUrl: inv.hosted_invoice_url || '',
+                }
+            },
+            { upsert: true }
+        );
+
+        logger.info(logContext,'Billing invoice stored successfully');
+        
+
+        if(localSub) {
+
+            logger.info(
+                {...logContext,subscriptionId: localSub?._id},
+                'Updating subscription status to active'
+            );
+
+            await BillingSubscription.updateOne({ _id: localSub._id},{ status: 'active'});
+
+            if (customerId) {
+
+                logger.info(
+                { ...logContext, customerId },
+                "Updating billing customer status to active"
+                );
+
+                await BillingCustomers.updateOne(
+                { _id: customerId },
+                { status: "active" }
+                );
             }
-        },
-        { upsert: true }
-    );
+        }
 
-    if(localSub) {
-        await BillingSubscription.updateOne({ _id: localSub._id},{ status: 'active'});
-        if(customerId) await BillingCustomers.updateOne({ _id: customerId},{ status: 'active'})
+        logger.info(logContext,"invoice.payment_succeeded processing completed");
+    } catch (error: any) {
+        logger.error(
+            {
+                ...logContext,
+                error: error.message,
+                stack: error.stack
+            },
+            'Failed processing invoice.payment_succeeded event'
+        );
+        throw error;
     }
 }
 
@@ -165,10 +281,11 @@ async function processJob(job: Job) {
     const { eventId,type,payload } = job.data
 
     // check job is previously processed
+    logger.info({eventId,type},'Check is Webhook event already processed');
     const alreadyProcessed = await WebhookEvent.findOne({ stripeEventId:eventId,processed:true })
 
     if(alreadyProcessed) {
-        console.log('Event is already processed',eventId);
+        logger.info({eventId,type},'Webhook Event is already Processed');
         return;
     }
 
@@ -176,11 +293,11 @@ async function processJob(job: Job) {
 
         switch(type) {
             case 'checkout.session.completed':
-                await handleCheckoutSessionCompleted(payload as Stripe.Checkout.Session)
+                await handleCheckoutSessionCompleted(payload as Stripe.Checkout.Session,eventId)
                 break;
 
             case 'invoice.payment_succeeded':
-                await handleInvoicePaymentSucceeded(payload as any)
+                await handleInvoicePaymentSucceeded(payload as any,eventId)
                 break;
                 
             case 'invoice.payment_failed':
@@ -207,11 +324,28 @@ async function start() {
   const worker = new Worker(
     WEBHOOK_QUEUE_NAME,
     async (job: Job) => {
+      const { eventId,type } = job.data;
       try {
-        console.log(`[worker] started job ${job.id} of type ${job.name}`);
+
+        logger.info({jobId:job.id,jobName:job.name,eventId,type},
+                    'Webhook worker started processing job');
         await processJob(job);
-      } catch (error) {
-        console.error(`[worker] error processing job ${job.id}:`, error);
+
+        logger.info(
+            { jobId: job.id, eventId, type },
+            "Webhook worker completed job"
+        )
+      } catch (error: any) {
+
+        logger.error(
+            {
+                jobId: job.id,
+                eventId,
+                type,
+                error: error.message
+            }
+        );
+
         throw error;
       }
     },
@@ -221,5 +355,6 @@ async function start() {
 
 start().catch((err) => {
   console.error("[worker] failed to start:", err);
+  logger.error({err},'Worker failed to start')
   process.exit(1);
 });

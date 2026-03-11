@@ -18,15 +18,18 @@ export class BillingWebhookService {
    * events like - ['checkout.sessions.completed'] - for the successfull completion of the event
    */
   public async handleEvent(
-    event: Stripe.Event
+    event: Stripe.Event,log:any
   ): Promise<{ ok: boolean; message?: string }> {
     // idempotency check  persist raw event for audit -> so the same evevnt is not triggered more than once
+    log.info({eventId:event.id},'Check Stripe Webhook Event is already processed')
     const exists = await WebhookEvent.findOne({ stripeEventId: event.id });
     if (exists) {
+      log.info({eventId:event.id},'Stripe Event ID is already Processed');
       return { ok: true, message: "event already processed" };
     }
 
     // store raw event for the processing and itially mark as false until whole thing processed
+    log.info({eventId:event.id},'Store Webhook event in DB');
     await WebhookEvent.create({
       stripeEventId: event.id,
       type: event.type,
@@ -74,6 +77,7 @@ export class BillingWebhookService {
     // }
 
     try {
+      log.info({eventId:event.id},'Enqueue the Job in the Webhook Queue for Processing');
       // Enqueue the event for background processing
       await webhookQueue.add(event.type, {
         eventId: event.id,
@@ -82,9 +86,10 @@ export class BillingWebhookService {
       })
 
       // Acknowledge quickly to the stripe
+      log.info({eventId:event.id},'Acknowledge to Stripe Immediately');
       return { ok:true }
     } catch (err: any) {
-      console.error('Error Queuing webhook',err)
+      log.info({eventId: event.id},'Queuing of Webhook Event Failed');
       // Still ack so stripe won't retry too fast; worker will handle failures
       return { ok: false, message: err.message }
     }
