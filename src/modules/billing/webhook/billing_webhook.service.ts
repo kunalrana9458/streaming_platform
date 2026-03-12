@@ -23,6 +23,7 @@ export class BillingWebhookService {
     // idempotency check  persist raw event for audit -> so the same evevnt is not triggered more than once
     log.info({eventId:event.id},'Check Stripe Webhook Event is already processed')
     const exists = await WebhookEvent.findOne({ stripeEventId: event.id });
+    
     if (exists) {
       log.info({eventId:event.id},'Stripe Event ID is already Processed');
       return { ok: true, message: "event already processed" };
@@ -83,6 +84,16 @@ export class BillingWebhookService {
         eventId: event.id,
         type: event.type,
         payload: event.data.object
+      },
+      {
+        // retry logic for failed jobs
+        attempts: 5,
+        backoff:{
+          type:'exponential',
+          delay: 5000 // inital delay
+        },
+        removeOnComplete: true,
+        removeOnFail: false
       })
 
       // Acknowledge quickly to the stripe

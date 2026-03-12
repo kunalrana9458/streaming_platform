@@ -297,7 +297,7 @@ async function handleSubscriptionUpdatedOrDeleted(sub: any) {
 
 
 async function processJob(job: Job) {
-    const { eventId,type,payload } = job.data
+    const { eventId,type,payload } = job.data;
 
     // check job is previously processed
     logger.info({eventId,type},'Check is Webhook event already processed');
@@ -328,10 +328,27 @@ async function processJob(job: Job) {
                 await handleSubscriptionUpdatedOrDeleted(payload as any)
             
             default:
-                console.log('Unhandled stripe Event Type :',type)
+                logger.warn({
+                    stripeEventId: eventId
+                },'Unhandled Stripe event type');
         }
-    } catch (error) {
-        
+
+
+        // Mark webhook event as processed
+        await WebhookEvent.updateOne(
+            { stripeEventId: eventId },
+            {processed: true}
+        );
+
+        logger.info({stripeEventId: eventId},'Webhook event marked as processed');
+    } catch (error: any) {
+
+        logger.error(
+            {stripeEventId: eventId},
+            'Webhook processing Failed'
+        );
+
+        throw error;
     }
 }
 
