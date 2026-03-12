@@ -1,16 +1,34 @@
 
 import { Job } from 'bullmq';
 import { webhookQueue } from '../../../lib/queue'
+import logger from '../../../observability/logger';
 
 async function inspectFailed() {
-    const failed = await webhookQueue.getFailed();
-    console.log('Failed job count:',failed.length);
+    const failedJobs = await webhookQueue.getFailed();
+    
+    logger.info({count: failedJobs.length},"Inspecting failed webhook jobs");
 
-    for(const job of failed) {
-        console.log('Failed Job:',job.id,job.name,job.failedReason);
-        // future enhancement : export to sentry / email / Slack
+    for(const job of failedJobs) {
+        
+        const {eventId,type} = job.data || {};
+
+        // montitor the failed jobs of webhook queue
+        logger.error(
+            {
+                jobId: job.id,
+                name: job.name,
+                attemptsMade: job.attemptsMade,
+                failedReason: job.failedReason,
+                eventId,
+                type
+            },
+            'Webhook job failed permanently'
+        );      
     }
     process.exit(0);
 }
 
-inspectFailed().catch(err => { console.error(err); process.exit(1) })
+inspectFailed().catch((err) => {
+    logger.error({error: err.message},'Failed job inspector crashed');
+    process.exit(1);
+})

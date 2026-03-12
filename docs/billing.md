@@ -197,7 +197,9 @@ Stripe → Webhook → Queue → Worker
 Benefits:
 - prevents webhook timeouts
 - improves reliability
+- implement retry job failed Mechanism
 - allows retries
+- Get the all Failed Jobs which also failed after retry mechanism and also monitor that by (node src/modules/billing/workers/failedJobHandler.ts)
 
 * Event Storage
 Raw webhook events are stored for:
