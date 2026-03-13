@@ -11,7 +11,8 @@ import {
     getSubscriptions,
     getInvoices,
     getWebhooks,
-    replayWebhook
+    replayWebhook,
+    cancelSubscription
  } from './billing.service'
 import { tryCatch } from 'bullmq';
 import mongoose from 'mongoose';
@@ -108,6 +109,38 @@ export async function getCustomerPortal(req: Request,res: Response) {
     } catch (err: any) {
         req.log.error({userId},'Billing Portal Url Getting Failed')
         return res.status(500).json({ error: err.message || 'Failed to create portal session' })
+    }
+}
+
+export async function cancelSubscriptionController(req: Request,res: Response) {
+    const { subscriptionId } = req.body;
+
+    if(!subscriptionId) {
+        req.log.info({subscriptionId},'Subscription ID is required');
+        return res.status(400).json({
+            ok: false,
+            message: "Subscription ID is required"
+        });
+    }
+
+    try {
+        req.log.info({subscriptionId},'Cancel Subscription Service called');
+        const result = await cancelSubscription(subscriptionId,req.log);
+    
+        return res.status(200).json({
+            ok: true,
+            message: 'Subscription scheduled for cancellation',
+            data: {
+                expiresAt: new Date(result?.cancel_at*1000),
+                cancelAtPeriodEnd: result.cancel_at_period_end
+            }
+        });
+    } catch (error: any) {
+        req.log.error({subscriptionId},'Subscription Cancellation Failed');
+        return res.status(500).json({
+            ok: false,
+            message: error.message
+        });
     }
 }
 

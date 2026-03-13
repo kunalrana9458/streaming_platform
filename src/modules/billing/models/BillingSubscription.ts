@@ -5,6 +5,7 @@ export interface IBillingSubscription extends Document {
   stripeSubscriptionId: string;
   planId?: mongoose.Types.ObjectId;
   status?: string;
+  cancelAtPeriodEnd?: Boolean,
   currentPeriodStart?: Date;
   currentPeriodEnd?: Date;
   quantity?: number;
@@ -18,6 +19,7 @@ const BillingSubscriptionSchema = new Schema<IBillingSubscription>({
   stripeSubscriptionId: { type: String, required: true, unique: true },
   planId: { type: Schema.Types.ObjectId, ref: 'Plan' },
   status: String,
+  cancelAtPeriodEnd: Boolean,
   currentPeriodStart: Date,
   currentPeriodEnd: Date,
   quantity: { type: Number, default: 1 },

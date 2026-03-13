@@ -10,7 +10,8 @@ import {
   getInvoicesController,
   getWebhooksController,
   replayWebhookController,
-  reprocessSubscription
+  reprocessSubscription,
+  cancelSubscriptionController
 } from "./billing.controller";
 import { requireAuth, requireRole } from "../../middleware/authMiddleware";
 
@@ -33,6 +34,9 @@ router.get('/portal',requireAuth,getCustomerPortal)
 
 // generate and resend portal access utl
 router.get('/resend-payment-portal',resendPaymentUpdateController)
+
+// route to cancel the subscription plan
+router.post('/cancel-subscription',requireAuth,cancelSubscriptionController)
 
 /**
  * Admin Routes for the subscription invoices

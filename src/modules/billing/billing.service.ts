@@ -8,6 +8,7 @@ import BillingInvoice from "./models/BillingInvoice";
 import { resendOTPHandler } from "../auth/auth-controller";
 import { emailQueue,webhookQueue } from "../../lib/queue";
 import WebhookEvent from "./models/WebhookEvent";
+import Stripe from "stripe";
 
 
 export async function createCustomer(authUserId: string,log:any) {
@@ -161,6 +162,31 @@ export async function billingStatus(userId: string,log:any) {
     currentPeriodStart: sub.currentPeriodStart,
     currentPeriodEnd: sub.currentPeriodEnd,
   };
+}
+
+export async function cancelSubscription(subscriptionId: string,log:any): Promise<Stripe.Subscription> {
+  try {
+    // call stripe api to tell don't renew that when current period ends
+    log.info({subscriptionId},'Stripe api called for cancel Subscrption');
+    const stripeSub = await stripe.subscriptions.update(subscriptionId,{
+      cancel_at_period_end: true
+    });
+
+    log.info({subscriptionId},'Update the status in DB for cancel subscription');
+    // update the DB cancelAtPeriodEnd as true immediatelty for UI shows plan expired at Date
+    await BillingSubscription.updateOne(
+      {stripeSubscriptionId: subscriptionId},
+      {
+        $set: {
+          cancelAtPeriodEnd: true
+        }
+      }
+    );
+    console.log("STRIPE SUBSCRIPTION IS:",stripeSub)
+    return stripeSub;
+  } catch (error: any) {
+    throw new Error(`Failed to cancel subscription: ${error.message}`);
+  }
 }
 
 export async function getPortal(userId: string,log:any) {
