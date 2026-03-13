@@ -285,7 +285,7 @@ async function handleSubscriptionUpdatedOrDeleted(sub: any) {
                 $set: {
                     status: sub.status,
                     currentPeriodStart: sub.current_period_start ? new Date(sub.current_period_start*1000) : undefined,
-                    currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end) : undefined
+                    currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end*1000) : undefined
                 }
             }
         );
