@@ -24,3 +24,19 @@ export const getBillingSummmary = async (req:Request,res:Response) => {
         return res.status(500).json({ ok: false, message: error.message })
     }
 }
+
+export const getBillingTrends = async (req: Request, res: Response) {
+    try {
+        // Get 'days' from query params, default to 30
+        const days = parseInt(req.query.days as string) || 30;
+        const trends = await analyticsService.getDailyTrends(days);
+
+        return res.status(200).json({
+            ok: true,
+            message: `Daily subscription trends for the last ${days} days fetched`,
+            data: trends
+        })
+    } catch (error: any) {
+        return res.status(500).json({ ok: false, message: error.message });
+    }
+}

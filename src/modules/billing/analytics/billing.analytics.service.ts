@@ -1,4 +1,5 @@
 import BillingSubscription from "../models/BillingSubscription";
+import moment from "moment";
 
 export class BillingAnalyticsService {
     public async getSummaryStats() {
@@ -16,7 +17,7 @@ export class BillingAnalyticsService {
                                 as: "plan"
                             }
                         },
-                        { $unwind: "$plam" },
+                        { $unwind: "$plan" },
                         {
                             $group: {
                                 _id: null,
@@ -47,5 +48,36 @@ export class BillingAnalyticsService {
                 }
             }
         ])
+    }
+
+    public async getDailyTrends(days: number=30) {
+        // calculate the cutoff date
+        const startDate = moment().substract(days,'days').startOf('day').toDate();
+
+        return await BillingSubscription.aggregate([
+            {
+                // 1. filter: only get records from the last X days
+                $match: {
+                    createdAt: { $gte: startDate }
+                }
+            },
+            {
+                $project: {
+                    day: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    status: 1
+                }
+            },
+            {
+                // 3. Group: Count how many per day
+                $group: {
+                    _id: "$day",
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                // 4. Sort: Make sure the chart goes from oldest to newest
+                $sort: { _id: 1 }
+            }
+        ]);
     }
 }
