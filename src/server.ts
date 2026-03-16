@@ -9,6 +9,7 @@ import { getMetrics } from './observability/metrics'
 import authRoutes from './modules/auth/auth.routes'
 import catalogRoutes from './modules/catalog/catalog.routes'
 import mediaRoutes from './modules/media/media.routes'
+import billingAnalytics from './modules/billing/analytics/billing.analytics.routes'
 import billingRoutes from './modules/billing/billing.route'
 import elasticSearchRoutes from './modules/elastic-search/es.routes'
 import billingWebhookRoute from './modules/billing/webhook/billing_webhook.routes'
@@ -74,6 +75,7 @@ app.use('/catalog',catalogRoutes)
 app.use('/media',mediaRoutes)
 app.use('/billing',billingRoutes)
 app.use('/es',elasticSearchRoutes)
+app.use('/analytics/billing',billingAnalytics)
 
 const PORT = process.env.PORT || 5000   
 

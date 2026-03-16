@@ -25,7 +25,7 @@ export const getBillingSummmary = async (req:Request,res:Response) => {
     }
 }
 
-export const getBillingTrends = async (req: Request, res: Response) {
+export const getBillingTrends = async (req: Request, res: Response) => {
     try {
         // Get 'days' from query params, default to 30
         const days = parseInt(req.query.days as string) || 30;

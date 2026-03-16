@@ -41,10 +41,10 @@ export class BillingAnalyticsService {
             {
                 // clean up the ouput so it's not a messy nested array
                 $project: {
-                    activeUsers: { $arrayEleAt: ["$activeStats.count",0] },
-                    mrr: { $arrayEleAt: ["$activeStats.mrr",0] },
-                    churningUsers: { $arrayEleAt: ["$churningCount.count",0] },
-                    canceledTotal: { $arrayEleAt: ["$totalCanceled.count",0] }
+                    activeUsers: { $arrayElemAt: ["$activeStats.count",0] },
+                    mrr: { $arrayElemAt: ["$activeStats.mrr",0] },
+                    churningUsers: { $arrayElemAt: ["$churningCount.count",0] },
+                    canceledTotal: { $arrayElemAt: ["$totalCanceled.count",0] }
                 }
             }
         ])
@@ -52,7 +52,7 @@ export class BillingAnalyticsService {
 
     public async getDailyTrends(days: number=30) {
         // calculate the cutoff date
-        const startDate = moment().substract(days,'days').startOf('day').toDate();
+        const startDate = moment().subtract(days,'days').startOf('day').toDate();
 
         return await BillingSubscription.aggregate([
             {
