@@ -3,22 +3,21 @@ import BillingInvoice from "../models/BillingInvoice";
 
 // ─────────────────────────────────────────────
 //  GET /billing/invoices
-//  Aggregation: joins customer + subscription + plan in one query
 // ─────────────────────────────────────────────
-export async function listInvoices({
-  status,
-  search,
-  page = 1,
-  pageSize = 8,
-}: {
-  status?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}) {
+export async function listInvoices(
+  params: {
+    status?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  },
+  log: any
+) {
+  const { status, search, page = 1, pageSize = 8 } = params;
   const skip = (page - 1) * pageSize;
 
-  // ── Stage 1: join BillingCustomer ──────────
+  log.info({ status, search, page, pageSize }, "Invoice list fetch started");
+
   const pipeline: mongoose.PipelineStage[] = [
     {
       $lookup: {
@@ -29,8 +28,6 @@ export async function listInvoices({
       },
     },
     { $unwind: { path: "$customerId", preserveNullAndEmpty: false } },
-
-    // ── Stage 2: join BillingSubscription ─────
     {
       $lookup: {
         from: "billingsubscriptions",
@@ -40,8 +37,6 @@ export async function listInvoices({
       },
     },
     { $unwind: { path: "$subscriptionId", preserveNullAndEmpty: true } },
-
-    // ── Stage 3: join Plan inside subscription ─
     {
       $lookup: {
         from: "plans",
@@ -58,19 +53,12 @@ export async function listInvoices({
     },
   ];
 
-  // ── Stage 4: filter ────────────────────────
   const match: Record<string, unknown> = {};
   if (status && status !== "all") match["status"] = status;
-  if (search) {
-    // search on customer email
-    match["customerId.email"] = { $regex: search, $options: "i" };
-  }
+  if (search) match["customerId.email"] = { $regex: search, $options: "i" };
   if (Object.keys(match).length) pipeline.push({ $match: match });
 
-  // ── Stage 5: sort newest first ─────────────
   pipeline.push({ $sort: { createdAt: -1 } });
-
-  // ── Stage 6: run count + paginated data in parallel ──
   pipeline.push({
     $facet: {
       data: [{ $skip: skip }, { $limit: pageSize }],
@@ -80,18 +68,23 @@ export async function listInvoices({
 
   const [result] = await BillingInvoice.aggregate(pipeline);
 
-  return {
-    data: result?.data ?? [],
-    total: result?.total?.[0]?.count ?? 0,
-    page,
-    pageSize,
-  };
+  const total = result?.total?.[0]?.count ?? 0;
+  const data  = result?.data ?? [];
+
+  log.info(
+    { status, search, page, pageSize, total, returned: data.length },
+    "Invoice list fetched successfully"
+  );
+
+  return { data, total, page, pageSize };
 }
 
 // ─────────────────────────────────────────────
 //  GET /billing/invoices/:id
 // ─────────────────────────────────────────────
-export async function getInvoiceById(id: string) {
+export async function getInvoiceById(id: string, log: any) {
+  log.info({ invoiceId: id }, "Invoice detail fetch started");
+
   const [invoice] = await BillingInvoice.aggregate([
     { $match: { _id: new mongoose.Types.ObjectId(id) } },
     {
@@ -128,48 +121,110 @@ export async function getInvoiceById(id: string) {
     },
   ]);
 
-  return invoice ?? null;
+  if (!invoice) {
+    log.warn({ invoiceId: id }, "Invoice not found");
+    return null;
+  }
+
+  log.info(
+    { invoiceId: id, stripeInvoiceId: invoice.stripeInvoiceId },
+    "Invoice detail fetched successfully"
+  );
+
+  return invoice;
 }
 
 // ─────────────────────────────────────────────
 //  PATCH /billing/invoices/:id/status
 // ─────────────────────────────────────────────
-export async function updateInvoiceStatus(id: string, status: string) {
+export async function updateInvoiceStatus(
+  id: string,
+  status: string,
+  log: any
+) {
+  log.info({ invoiceId: id, newStatus: status }, "Invoice status update started");
+
   const invoice = await BillingInvoice.findByIdAndUpdate(
     id,
     { status },
     { new: true }
   );
-  if (!invoice) throw new Error("Invoice not found");
+
+  if (!invoice) {
+    log.warn({ invoiceId: id }, "Invoice not found for status update");
+    throw new Error("INVOICE_NOT_FOUND");
+  }
+
+  log.info(
+    { invoiceId: id, stripeInvoiceId: invoice.stripeInvoiceId, status },
+    "Invoice status updated successfully"
+  );
+
   return invoice;
 }
 
 // ─────────────────────────────────────────────
 //  POST /billing/invoices/:id/remind
-//  Plug in your email/Stripe reminder logic here
 // ─────────────────────────────────────────────
-export async function sendInvoiceReminder(id: string) {
+export async function sendInvoiceReminder(id: string, log: any) {
+  log.info({ invoiceId: id }, "Invoice reminder request started");
+
   const invoice = await BillingInvoice.findById(id);
-  if (!invoice) throw new Error("Invoice not found");
-  if (invoice.status !== "open") {
-    throw new Error("Reminders can only be sent for open invoices");
+
+  if (!invoice) {
+    log.warn({ invoiceId: id }, "Invoice not found for reminder");
+    throw new Error("INVOICE_NOT_FOUND");
   }
-  // TODO: call Stripe or your mailer here
-  // await stripe.invoices.sendInvoice(invoice.stripeInvoiceId)
+
+  if (invoice.status !== "open") {
+    log.warn(
+      { invoiceId: id, status: invoice.status },
+      "Reminder blocked — invoice is not open"
+    );
+    throw new Error("INVOICE_NOT_OPEN");
+  }
+
+  // TODO: await stripe.invoices.sendInvoice(invoice.stripeInvoiceId)
+  // TODO: or enqueue email via emailQueue
+
+  log.info(
+    { invoiceId: id, stripeInvoiceId: invoice.stripeInvoiceId },
+    "Invoice reminder sent successfully"
+  );
+
   return { message: "Reminder sent successfully" };
 }
 
 // ─────────────────────────────────────────────
 //  POST /billing/invoices/:id/void
 // ─────────────────────────────────────────────
-export async function voidInvoice(id: string) {
+export async function voidInvoice(id: string, log: any) {
+  log.info({ invoiceId: id }, "Invoice void request started");
+
   const invoice = await BillingInvoice.findById(id);
-  if (!invoice) throw new Error("Invoice not found");
-  if (!["open", "draft"].includes(invoice.status ?? "")) {
-    throw new Error("Only open or draft invoices can be voided");
+
+  if (!invoice) {
+    log.warn({ invoiceId: id }, "Invoice not found for void");
+    throw new Error("INVOICE_NOT_FOUND");
   }
-  // TODO: also call stripe.invoices.voidInvoice(invoice.stripeInvoiceId)
+
+  if (!["open", "draft"].includes(invoice.status ?? "")) {
+    log.warn(
+      { invoiceId: id, status: invoice.status },
+      "Void blocked — invoice is not open or draft"
+    );
+    throw new Error("INVOICE_NOT_VOIDABLE");
+  }
+
+  // TODO: await stripe.invoices.voidInvoice(invoice.stripeInvoiceId)
+
   invoice.status = "void";
   await invoice.save();
+
+  log.info(
+    { invoiceId: id, stripeInvoiceId: invoice.stripeInvoiceId },
+    "Invoice voided successfully"
+  );
+
   return invoice;
 }
