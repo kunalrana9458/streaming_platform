@@ -3,21 +3,22 @@ import BillingCustomer from "../models/BillingCustomers";
 
 // ─────────────────────────────────────────────
 //  GET /billing/customers
-//  Aggregation: joins latest subscription + plan per customer
 // ─────────────────────────────────────────────
-export async function listCustomers({
-  status,
-  page = 1,
-  pageSize = 10,
-}: {
-  status?: string;
-  page?: number;
-  pageSize?: number;
-}) {
+export async function listCustomers(
+  params: {
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  },
+  log: any
+) {
+  const { status, page = 1, pageSize = 10 } = params;
   const skip = (page - 1) * pageSize;
 
+  log.info({ status, page, pageSize }, "Customer list fetch started");
+
   const pipeline: mongoose.PipelineStage[] = [
-    // ── Join their subscriptions ──────────────
+    // join all subscriptions for this customer
     {
       $lookup: {
         from: "billingsubscriptions",
@@ -26,8 +27,7 @@ export async function listCustomers({
         as: "subscriptions",
       },
     },
-
-    // ── Pull the most recent subscription ─────
+    // pull only the most recent subscription
     {
       $addFields: {
         latestSubscription: {
@@ -43,8 +43,7 @@ export async function listCustomers({
         },
       },
     },
-
-    // ── Join Plan for that subscription ───────
+    // join plan for that subscription
     {
       $lookup: {
         from: "plans",
@@ -59,8 +58,7 @@ export async function listCustomers({
         preserveNullAndEmpty: true,
       },
     },
-
-    // ── Count their invoices in same pipeline ─
+    // join invoices and compute totals inline
     {
       $lookup: {
         from: "billinginvoices",
@@ -89,19 +87,15 @@ export async function listCustomers({
         },
       },
     },
-
-    // ── Drop raw arrays — keep only summaries ─
+    // drop raw arrays — keep only computed summaries
     { $unset: ["invoices", "subscriptions"] },
   ];
 
-  // ── Filter by customer status ─────────────
   if (status && status !== "all") {
     pipeline.push({ $match: { status } });
   }
 
   pipeline.push({ $sort: { createdAt: -1 } });
-
-  // ── Paginate + count ──────────────────────
   pipeline.push({
     $facet: {
       data: [{ $skip: skip }, { $limit: pageSize }],
@@ -111,18 +105,23 @@ export async function listCustomers({
 
   const [result] = await BillingCustomer.aggregate(pipeline);
 
-  return {
-    data: result?.data ?? [],
-    total: result?.total?.[0]?.count ?? 0,
-    page,
-    pageSize,
-  };
+  const total = result?.total?.[0]?.count ?? 0;
+  const data  = result?.data ?? [];
+
+  log.info(
+    { status, page, pageSize, total, returned: data.length },
+    "Customer list fetched successfully"
+  );
+
+  return { data, total, page, pageSize };
 }
 
 // ─────────────────────────────────────────────
 //  GET /billing/customers/:id
 // ─────────────────────────────────────────────
-export async function getCustomerById(id: string) {
+export async function getCustomerById(id: string, log: any) {
+  log.info({ customerId: id }, "Customer detail fetch started");
+
   const [customer] = await BillingCustomer.aggregate([
     { $match: { _id: new mongoose.Types.ObjectId(id) } },
     {
@@ -131,6 +130,18 @@ export async function getCustomerById(id: string) {
         localField: "_id",
         foreignField: "customerId",
         as: "subscriptions",
+        pipeline: [
+          {
+            $lookup: {
+              from: "plans",
+              localField: "planId",
+              foreignField: "_id",
+              as: "planId",
+            },
+          },
+          { $unwind: { path: "$planId", preserveNullAndEmpty: true } },
+          { $sort: { createdAt: -1 } },
+        ],
       },
     },
     {
@@ -139,10 +150,27 @@ export async function getCustomerById(id: string) {
         localField: "_id",
         foreignField: "customerId",
         as: "invoices",
-        pipeline: [{ $sort: { createdAt: -1 } }, { $limit: 10 }],
+        pipeline: [
+          { $sort: { createdAt: -1 } },
+          { $limit: 10 },
+        ],
       },
     },
   ]);
 
-  return customer ?? null;
+  if (!customer) {
+    log.warn({ customerId: id }, "Customer not found");
+    return null;
+  }
+
+  log.info(
+    {
+      customerId: id,
+      stripeCustomerId: customer.stripeCustomerId,
+      subscriptionCount: customer.subscriptions?.length ?? 0,
+    },
+    "Customer detail fetched successfully"
+  );
+
+  return customer;
 }
