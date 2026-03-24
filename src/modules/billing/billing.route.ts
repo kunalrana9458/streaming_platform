@@ -14,6 +14,9 @@ import {
   cancelSubscriptionController
 } from "./billing.controller";
 import { requireAuth, requireRole } from "../../middleware/authMiddleware";
+import invoiceRoutes from "./invoices/invoice.route";
+import subscriptionRoutes from "./subscriptions/subscription.routes";
+import customerRoutes from "./customers/customer.routes";
 
 const router = Router();
 
@@ -68,5 +71,9 @@ router.post('/reprocess-subscription',
   requireRole('admin'),
   reprocessSubscription
 )
+
+router.use("/invoices",invoiceRoutes);
+router.use("/subscriptions",subscriptionRoutes);
+router.use("/customers",customerRoutes)
 
 export default router;
