@@ -47,31 +47,31 @@ export function signRefreshToken(user: IUser,log:any){
 }
 
 
-export function verifyRefreshToken(token: string) {
+export function verifyRefreshToken(token: string,log: any) {
   if (!REFRESH_SECRET) {
-    console.error("Missing REFRESH_SECRET env var!");
+    log.error('Missing REFRESH_SECRET env Var!');
     throw new Error("MISSING_REFRESH_SECRET");
   }
 
   if (!token || typeof token !== "string") {
-    console.error("No token provided to verifyRefreshToken");
+    log.error("No token provided to verifyRefreshToken");
     throw new Error("NO_REFRESH_TOKEN");
   }
 
   const trimmed = token.trim();
 
   try {
-    console.log("🔍 verifyRefreshToken - token length:", trimmed.length);
+    log.info("VerifyRefreshToken - token length:");
     const decoded = jwt.verify(trimmed, REFRESH_SECRET) as {
       sub: string;
       tv: number;
       iat?: number;
       exp?: number;
     };
-    console.log("✅ verifyRefreshToken - decoded:", decoded);
+    log.info("✅ verifyRefreshToken - decoded:", decoded);
     return decoded;
   } catch (err: any) {
-    console.error("❌ verifyRefreshToken error:", err && err.name, err && err.message);
+    log.error("❌ verifyRefreshToken error:", err && err.name, err && err.message);
     // Preserve error names so caller can decide
     if (err && err.name === "TokenExpiredError") throw new Error("REFRESH_TOKEN_EXPIRED");
     if (err && err.name === "JsonWebTokenError") throw new Error("REFRESH_TOKEN_INVALID");
@@ -301,9 +301,9 @@ export async function loginWithEmail(email:string,password:string,log:any,option
 }
 
 export async function refreshTokens(oldRefresh:string,log:any) {
-    console.log("Before Verification of Refresh Token")
-    const payload = verifyRefreshToken(oldRefresh)
-    console.log("After Verification of Refresh Token")
+    log.info("Refresh Token Verification Started")
+    const payload = verifyRefreshToken(oldRefresh,log)
+    log.info("Refresh Token Verification Successfull")
     const user = await User.findById(payload.sub)
     if(!user) throw new Error('INVALID_REFRESH')
     if(user.tokenVersion !== payload.tv) throw new Error('INVALID_REFRESH_VERSION')
