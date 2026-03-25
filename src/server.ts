@@ -15,6 +15,7 @@ import elasticSearchRoutes from './modules/elastic-search/es.routes'
 import billingWebhookRoute from './modules/billing/webhook/billing_webhook.routes'
 import { health,ready } from './observability/health'
 import { v4 as uuidv4 } from 'uuid';
+import { globalRateLimiter } from './middleware/rateLimiter';
 
 dotenv.config()
 
@@ -68,7 +69,7 @@ app.get('/metrics',async(req,res) => {
 
 app.get('/', (_req, res) => { res.send('StreamSphere backend running !')})
 
-
+app.use(globalRateLimiter)
 
 app.use('/auth',authRoutes)
 app.use('/catalog',catalogRoutes)
